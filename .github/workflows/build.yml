@@ -1,0 +1,71 @@
+# ============================================
+# KATA Architecture - TestBuild Pipeline
+# ============================================
+# Purpose: Validate framework compiles and passes static checks before merging PRs.
+# This pipeline acts as a smoke test for the test framework itself.
+
+name: TestBuild Checks
+run-name: ${{ github.actor }} triggered TestBuild Checks on ${{ github.ref_name }}
+
+on:
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  # One build per PR branch: a force-push supersedes the run already in flight.
+  # Safe to cancel — this job only validates, it publishes nothing.
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+  TEST_ENV: 'staging'
+  # Credentials (required to validate environment configuration)
+  STAGING_USER_EMAIL: ${{ secrets.STAGING_USER_EMAIL }}
+  STAGING_USER_PASSWORD: ${{ secrets.STAGING_USER_PASSWORD }}
+
+jobs:
+  TestBuild:
+    name: Framework Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Validate Test Environment Variables
+        run: bun run test:env:check
+
+      - name: TypeScript Check
+        run: bun run types:check
+
+      - name: ESLint Check
+        run: bun run lint:check
+
+      - name: Skill Activation Evals Check
+        run: bun run skills:evals
+        # Structural validation of .agents/skills/*/evals/evals.json — catches
+        # malformed cases, bad polarity fields, dangling expected_skill
+        # references. Does not invoke a model; see scripts/run-skill-evals.ts
+        # header for scope.
+
+      - name: Playwright Compile Check
+        run: bunx playwright test --list
+        # This validates that all test files compile correctly without executing them
+
+      - name: Validate Playwright Config
+        run: |
+          echo "Validating Playwright configuration..."
+          bunx playwright test --config=playwright.config.ts --list > /dev/null 2>&1 && echo "Configuration valid" || echo "Configuration warning detected"

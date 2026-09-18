@@ -1,0 +1,657 @@
+/**
+ * @fileoverview Canonical variable manifest — the SINGLE SOURCE OF TRUTH for
+ * every environment variable this repo knows about and where each one must go.
+ *
+ * Per handoff decision D1 (`.scratch/handoff-installer-variables-automation.md`):
+ * this typed module replaces the four disconnected, drift-prone lists that used
+ * to scatter var routing across the codebase (`INSTALLER_DEFERRED_VARS`,
+ * `MCP_SERVER_SECRETS`, `DAY_ZERO_*`, and `doctor.ts`'s `PROJECT_BOUND_VARS`).
+ *
+ * Consumers (wired in later phases — NOT this phase):
+ *   - `cli/install.ts`          → manifest-driven collection + closing summary.
+ *   - `cli/doctor.ts`           → required-var health checks.
+ *   - `cli/update-boilerplate.ts` → `.env` drift detection on update.
+ *
+ * `.env.example` stays the human-facing doc humans copy from; `scripts/check-vars.ts`
+ * asserts manifest ⇄ `.env.example` parity so they never drift (D1).
+ *
+ * Remote target for THIS repo (QA) = GitHub Actions secrets (`gh secret set`),
+ * because the test suites run in GitHub Actions. `GITHUB_TOKEN` is deliberately
+ * EXCLUDED from the manifest: it is auto-injected by Actions and must never be
+ * pushed (see the comment on the local-only block below).
+ */
+
+import * as fs from 'node:fs';
+
+// ----------------------------------------------------------------------------
+// Types
+// ----------------------------------------------------------------------------
+
+/**
+ * Where a variable must live.
+ *   - `local`  → the developer's `.env` file.
+ *   - `github` → a GitHub Actions repository secret (or CI env input).
+ *
+ * NOTE: `VarScope` (production/preview/development) is intentionally OMITTED for
+ * this repo. GitHub Actions secrets have no per-scope concept — the field exists
+ * only in the DEV (Vercel) sibling boilerplate. Kept out here for clarity rather
+ * than carrying a dead field.
+ */
+export type VarDestination = 'local' | 'github';
+
+/**
+ * Where the tooling READS a variable's value from when it needs one.
+ *
+ * - `env-file` (the default) — the value lives in `.env`. True for every var
+ *   with a `local` destination, which is almost all of them.
+ * - `atlassian-instance` — resolved by `cli/lib/atlassian-instance.ts` from
+ *   `.agents/project.yaml` -> `issue_tracker.atlassian_url`.
+ *
+ * The second case exists because `ATLASSIAN_URL` is deliberately NOT a local
+ * variable: while it sat in `.env`, a stale copy in the process environment
+ * shadowed the corrected file (both `bun`'s autoload and `dotenv-cli` skip a
+ * var that is already set), and `jira:sync-issues` silently rebuilt the PBI
+ * cache from a dead Jira site with exit code 0. The host is project identity,
+ * so it is anchored to a versioned file that shows up in a diff.
+ *
+ * The NAME keeps a `github` destination because a CI step or third-party action
+ * may still want the variable in its environment. Its value is pushed there FROM
+ * the yaml, so the two cannot drift. The repo's own test runtime does not rely on
+ * that: `config/variables.ts` resolves the host through the same resolver.
+ */
+export type VarValueSource = 'env-file' | 'atlassian-instance';
+
+/**
+ * A conditional-required clause: the var is required only when another env var
+ * holds a specific value, e.g. `{ ifEnv: 'TEST_ENV=staging' }`.
+ */
+export interface VarRequiredIfEnv {
+  ifEnv: string
+}
+
+/**
+ * Canonical description of one environment variable.
+ *
+ *   - `name`         UPPER_SNAKE_CASE env-var key.
+ *   - `destinations` non-empty list of sinks this var must reach.
+ *   - `secret`       true → mask in logs, pipe via stdin, treat as sensitive.
+ *   - `required`     `true` (always), `false` (optional), or a conditional
+ *                    clause (`{ ifEnv: 'TEST_ENV=local' }`).
+ *   - `critical`     true → a project-INDEPENDENT tool credential the NORMAL
+ *                    installer prompts for interactively at day-0 (identical in
+ *                    both boilerplates). false → NON-critical: never asked at
+ *                    install, never warned about; surfaced only in the closing
+ *                    "Next steps — finish later" list with its `obtainHint`,
+ *                    and settable later via `bun run setup --variables`.
+ *   - `obtainHint`   (NON-critical only) concise where/how-to-get-it pointer
+ *                    printed in the closing next-steps section.
+ *   - `defaultValue` (special cases only, e.g. TEST_ENV) value the installer
+ *                    writes when the var is absent — WITHOUT prompting.
+ *   - `note`         one-line human rationale / CI consumer reference.
+ */
+export interface VarSpec {
+  name: string
+  /**
+   * Write destinations. A var declaring a non-default `valueSource` (see
+   * `VarValueSource`) is never written to `.env` and therefore never carries
+   * `local`; `validateVarManifest` enforces that. Note the converse does NOT
+   * hold here: a CI-only var (AUTO_SYNC, SLACK_WEBHOOK_URL) is `github`-only
+   * without declaring a `valueSource`.
+   */
+  destinations: VarDestination[]
+  /**
+   * Where the value is read from. Omitted = `env-file` (the overwhelming
+   * default). A var declaring anything else has NO `.env` entry, so it is
+   * absent from `.env.example` and exempt from the parity check.
+   */
+  valueSource?: VarValueSource
+  secret: boolean
+  required: boolean | VarRequiredIfEnv
+  critical: boolean
+  obtainHint?: string
+  defaultValue?: string
+  note: string
+}
+
+// ----------------------------------------------------------------------------
+// The manifest — content sourced from §2 (QA table) of the handoff.
+// ----------------------------------------------------------------------------
+
+/**
+ * Every variable this repo manages, with its destination routing.
+ *
+ * Excluded by design: `GITHUB_TOKEN` (auto-injected by GitHub Actions — pushing
+ * it is both unnecessary and a footgun, so it is NOT listed here as pushable).
+ */
+export const VAR_MANIFEST: VarSpec[] = [
+  // --- Environment selection ---
+  {
+    name: 'TEST_ENV',
+    destinations: ['local', 'github'],
+    secret: false,
+    required: true,
+    critical: false,
+    defaultValue: 'local',
+    obtainHint: 'defaults to local; reconfigure manually or via the /adapt-framework skill when you adapt the framework to your project-under-test.',
+    note: 'Which environment to test against (local | staging). CI env INPUT, not a secret; local required by validateTestEnv.ts. Installer writes the default; never prompts.',
+  },
+
+  // --- Test user credentials (per-environment) ---
+  {
+    name: 'LOCAL_USER_EMAIL',
+    destinations: ['local', 'github'],
+    secret: false,
+    required: { ifEnv: 'TEST_ENV=local' },
+    critical: false,
+    obtainHint: 'test-user creds for your project-under-test; set when adapting the framework to your project.',
+    note: 'Local test user email. CI secret in all workflows. Project-dependent — set later, not at install.',
+  },
+  {
+    name: 'LOCAL_USER_PASSWORD',
+    destinations: ['local', 'github'],
+    secret: true,
+    required: { ifEnv: 'TEST_ENV=local' },
+    critical: false,
+    obtainHint: 'test-user creds for your project-under-test; set when adapting the framework to your project.',
+    note: 'Local test user password. CI secret in all workflows. Project-dependent — set later, not at install.',
+  },
+  {
+    name: 'STAGING_USER_EMAIL',
+    destinations: ['local', 'github'],
+    secret: false,
+    required: { ifEnv: 'TEST_ENV=staging' },
+    critical: false,
+    obtainHint: 'test-user creds for your project-under-test; set when adapting the framework to your project.',
+    note: 'Staging test user email. CI secret in build/regression/sanity/smoke workflows. Project-dependent — set later.',
+  },
+  {
+    name: 'STAGING_USER_PASSWORD',
+    destinations: ['local', 'github'],
+    secret: true,
+    required: { ifEnv: 'TEST_ENV=staging' },
+    critical: false,
+    obtainHint: 'test-user creds for your project-under-test; set when adapting the framework to your project.',
+    note: 'Staging test user password. Required when TEST_ENV=staging. Project-dependent — set later.',
+  },
+
+  // --- Xray (TMS, optional) ---
+  {
+    name: 'XRAY_CLIENT_ID',
+    destinations: ['local', 'github'],
+    secret: true,
+    required: false,
+    critical: false,
+    obtainHint: 'Xray Cloud → API keys (only if your project uses Xray TMS).',
+    note: 'Xray Cloud client id. Referenced by regression.yml §env; optional (needed only when AUTO_SYNC && xray).',
+  },
+  {
+    name: 'XRAY_CLIENT_SECRET',
+    destinations: ['local', 'github'],
+    secret: true,
+    required: false,
+    critical: false,
+    obtainHint: 'Xray Cloud → API keys (only if your project uses Xray TMS).',
+    note: 'Xray Cloud client secret. Referenced by regression.yml §env; optional (needed only when AUTO_SYNC && xray).',
+  },
+  {
+    name: 'XRAY_PROJECT_KEY',
+    destinations: ['local', 'github'],
+    secret: false,
+    required: false,
+    critical: false,
+    obtainHint: 'your Xray project key (only if your project uses Xray TMS).',
+    note: 'Xray project key. Optional operational param.',
+  },
+  {
+    name: 'STP_EXECUTION_KEY',
+    destinations: ['local', 'github'],
+    secret: false,
+    required: false,
+    critical: false,
+    obtainHint: 'key of the STR — the Test Execution linked to the sprint STP, already hanging off the "QA Test Artifacts" epic. NOT the key of the STP itself.',
+    // Without it, an import mints a NEW Test Execution on every run. Xray's
+    // import API cannot set a parent (`info` is `additionalProperties: false`),
+    // so that item is orphaned: no QA-process epic, outside the ladder. Pointing
+    // at an already-parented Execution is the only way results land where the
+    // artifact ladder expects them. CI refuses to import without it rather than
+    // industrialising the orphan.
+    //
+    // The name says which Plan the Execution belongs to, not which issue to
+    // pass: a Test Plan derives its status from its Executions and is never
+    // written into, so handing this the STP key is a mistake the sync detects
+    // and refuses. Xray-only — Modality jira-native has no Test Executions.
+    note: 'Target STR Test Execution for the results write-back (never the STP itself). Referenced by regression.yml; Xray-only, optional.',
+  },
+
+  // --- Operational CI flag ---
+  {
+    name: 'AUTO_SYNC',
+    destinations: ['github'],
+    secret: false,
+    required: false,
+    critical: false,
+    obtainHint: 'CI flag — set to "true" in GitHub secrets only if you auto-sync Xray results from CI.',
+    note: 'CI operational flag (default false). Referenced by regression.yml §env. GitHub-only.',
+  },
+
+  // --- Atlassian (Day-0 credentials) ---
+  // ATLASSIAN_URL is the ONE var that is not a `.env` entry. It is a public
+  // hostname, not a secret, and it is project IDENTITY — so it is anchored to
+  // `.agents/project.yaml` (versioned, shows up in a diff) instead of a local
+  // file a stale process value can shadow in silence. See `VarValueSource`.
+  //
+  // It keeps a `github` destination so a CI step that wants the variable can be
+  // fed from the yaml rather than a hand-maintained secret. The repo's own test
+  // runtime does not need it: `config/variables.ts` resolves the host directly.
+  {
+    name: 'ATLASSIAN_URL',
+    destinations: ['github'],
+    valueSource: 'atlassian-instance',
+    secret: false,
+    required: true,
+    critical: true,
+    note: 'Atlassian site URL. SOURCE OF TRUTH is .agents/project.yaml -> issue_tracker.atlassian_url, NOT .env — prompted at install and written there. Read it with `bun run --silent jira:url`.',
+  },
+  {
+    name: 'ATLASSIAN_EMAIL',
+    destinations: ['local', 'github'],
+    secret: false,
+    required: true,
+    critical: true,
+    note: 'Atlassian account email. CRITICAL — Day-0 collected.',
+  },
+  {
+    name: 'ATLASSIAN_API_TOKEN',
+    destinations: ['local', 'github'],
+    secret: true,
+    required: true,
+    critical: true,
+    note: 'Atlassian API token. CRITICAL — Day-0 collected; sensitive.',
+  },
+
+  // --- Slack (CI-only notifier) ---
+  {
+    name: 'SLACK_WEBHOOK_URL',
+    destinations: ['github'],
+    secret: true,
+    required: false,
+    critical: false,
+    obtainHint: 'Slack → Incoming Webhooks (optional CI notifications).',
+    note: 'CI-only Slack webhook for notifications. Absent from .env.example historically; GitHub-only secret.',
+  },
+
+  // --- LOCAL-ONLY set: no CI consumer; never pushed to GitHub ---
+  // (GITHUB_TOKEN is deliberately NOT in this manifest — auto-injected by Actions.)
+  {
+    name: 'TAVILY_API_KEY',
+    destinations: ['local'],
+    secret: true,
+    required: false,
+    critical: true,
+    note: 'Tavily web-search MCP key. CRITICAL — powers the pre-configured Tavily MCP; project-independent tool. Local only.',
+  },
+  {
+    name: 'POSTMAN_API_KEY',
+    destinations: ['local'],
+    secret: true,
+    required: false,
+    critical: false,
+    obtainHint: 'Postman → Settings → API keys (only if your project uses the Postman MCP).',
+    note: 'Postman MCP collection-runner key. Local only.',
+  },
+  {
+    name: 'API_BASE_URL',
+    destinations: ['local'],
+    secret: false,
+    required: false,
+    critical: false,
+    obtainHint: 'your project-under-test API base URL — set when adapting the framework.',
+    note: 'Backend API base URL for OpenAPI MCP exploration. Local only.',
+  },
+  {
+    name: 'OPENAPI_SPEC_PATH',
+    destinations: ['local'],
+    secret: false,
+    required: false,
+    critical: false,
+    obtainHint: 'path/URL to your project OpenAPI spec — set when adapting the framework.',
+    note: 'Path/URL to the OpenAPI spec for the OpenAPI MCP. Local only.',
+  },
+  {
+    name: 'API_TOKEN',
+    destinations: ['local'],
+    secret: true,
+    required: false,
+    critical: false,
+    obtainHint: 'legacy/optional — `bun run api:login` now writes the curl token to .auth/tokens.env, not here.',
+    note: 'Legacy. The OpenAPI MCP is schema-read-only and no longer reads this; api:login mints the token into .auth/tokens.env for curl-based API testing. Local only.',
+  },
+  {
+    name: 'RESEND_API_KEY',
+    destinations: ['local'],
+    secret: true,
+    required: false,
+    critical: true,
+    note: 'Resend email-test verification key; also authenticates the resend CLI. CRITICAL — project-independent email-testing tool. Local only.',
+  },
+  {
+    name: 'DBHUB_TYPE',
+    destinations: ['local'],
+    secret: false,
+    required: false,
+    critical: false,
+    obtainHint: 'your project DB driver (sqlserver | postgres | mysql | sqlite | mariadb) — set when adapting the framework.',
+    note: 'DBHub MCP driver (sqlserver | postgres | mysql | sqlite | mariadb). Local only.',
+  },
+  {
+    name: 'DBHUB_HOST',
+    destinations: ['local'],
+    secret: false,
+    required: false,
+    critical: false,
+    obtainHint: 'your project DB connection — set when adapting the framework.',
+    note: 'DBHub MCP host. Local only.',
+  },
+  {
+    name: 'DBHUB_PORT',
+    destinations: ['local'],
+    secret: false,
+    required: false,
+    critical: false,
+    obtainHint: 'your project DB connection — set when adapting the framework.',
+    note: 'DBHub MCP port. Local only.',
+  },
+  {
+    name: 'DBHUB_DATABASE',
+    destinations: ['local'],
+    secret: false,
+    required: false,
+    critical: false,
+    obtainHint: 'your project DB connection — set when adapting the framework.',
+    note: 'DBHub MCP database name. Local only.',
+  },
+  {
+    name: 'DBHUB_USER',
+    destinations: ['local'],
+    secret: false,
+    required: false,
+    critical: false,
+    obtainHint: 'your project DB connection — set when adapting the framework.',
+    note: 'DBHub MCP user. Local only.',
+  },
+  {
+    name: 'DBHUB_PASSWORD',
+    destinations: ['local'],
+    secret: true,
+    required: false,
+    critical: false,
+    obtainHint: 'your project DB connection — set when adapting the framework.',
+    note: 'DBHub MCP password. Local only; sensitive.',
+  },
+];
+
+// ----------------------------------------------------------------------------
+// Helpers
+// ----------------------------------------------------------------------------
+
+/**
+ * All manifest vars whose destinations include `dest`.
+ * Preserves manifest order.
+ */
+export function varsFor(dest: VarDestination): VarSpec[] {
+  return VAR_MANIFEST.filter(spec => spec.destinations.includes(dest));
+}
+
+/** A spec's value source, with the `env-file` default applied. */
+export function valueSourceOf(spec: VarSpec): VarValueSource {
+  return spec.valueSource ?? 'env-file';
+}
+
+/**
+ * Vars whose value actually lives in `.env`. This — NOT the whole manifest — is
+ * the set `.env.example` must document and the set the process⇄file drift check
+ * compares, because a var sourced elsewhere has no `.env` line to be right or
+ * wrong about.
+ */
+export function envFileVars(): VarSpec[] {
+  return VAR_MANIFEST.filter(spec => valueSourceOf(spec) === 'env-file');
+}
+
+/**
+ * The CRITICAL set — project-INDEPENDENT tool credentials the normal installer
+ * prompts for interactively at day-0 (identical across both boilerplates).
+ * Preserves manifest order. The `--variables` "set/reset critical" path and
+ * `install.ts` day-0 collection both iterate this.
+ */
+export function criticalVars(): VarSpec[] {
+  return VAR_MANIFEST.filter(spec => spec.critical);
+}
+
+/**
+ * The NON-critical set — vars NEVER prompted at install and never warned about.
+ * Surfaced only in the closing "Next steps — finish later" list (each with its
+ * `obtainHint`). Preserves manifest order.
+ */
+export function nonCriticalVars(): VarSpec[] {
+  return VAR_MANIFEST.filter(spec => !spec.critical);
+}
+
+/**
+ * True if the named var is declared `secret` in the manifest. Unknown names
+ * return `false` (the manifest is authoritative; callers should not assume a
+ * non-manifest var is sensitive based on this helper).
+ */
+export function isManifestSecret(name: string): boolean {
+  const spec = VAR_MANIFEST.find(s => s.name === name);
+  return spec ? spec.secret : false;
+}
+
+/**
+ * Resolve whether `spec` is required GIVEN the current environment snapshot.
+ *
+ *   - `required: true`  → always required.
+ *   - `required: false` → never required.
+ *   - `required: {ifEnv: 'KEY=VALUE'}` → required only when `env[KEY] === VALUE`.
+ *
+ * A malformed `ifEnv` clause (no `=`) is treated as not-required rather than
+ * throwing — `validateVarManifest()` is the place that rejects malformed specs.
+ */
+export function requiredNow(spec: VarSpec, env: Record<string, string>): boolean {
+  if (typeof spec.required === 'boolean') {
+    return spec.required;
+  }
+  const clause = spec.required.ifEnv;
+  const eq = clause.indexOf('=');
+  if (eq === -1) {
+    return false;
+  }
+  const key = clause.slice(0, eq).trim();
+  const expected = clause.slice(eq + 1).trim();
+  return (env[key] ?? '') === expected;
+}
+
+/**
+ * Parse the UNCOMMENTED `KEY=...` keys declared in a `.env.example` file.
+ *
+ * Lines that are blank, comments (`#`/`*` after optional leading whitespace),
+ * or lack a `=` are ignored. Inline trailing comments on a value line do NOT
+ * affect the key. Returns keys in file order, de-duplicated.
+ */
+export function parseDotEnvExampleKeys(envExamplePath: string): string[] {
+  const raw = fs.readFileSync(envExamplePath, 'utf8');
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed === '' || trimmed.startsWith('#') || trimmed.startsWith('*')) {
+      continue;
+    }
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) {
+      continue;
+    }
+    // Strip an optional `export ` prefix, then take the key.
+    const lhs = trimmed.slice(0, eq).replace(/^export\s+/, '').trim();
+    if (!/^[a-z_]\w*$/i.test(lhs)) {
+      continue;
+    }
+    if (!seen.has(lhs)) {
+      seen.add(lhs);
+      keys.push(lhs);
+    }
+  }
+  return keys;
+}
+
+/**
+ * Parses a dotenv file into KEY -> VALUE pairs, applying the same line rules as
+ * `parseDotEnvExampleKeys` plus value handling: one layer of matching quotes is
+ * stripped, and on an UNQUOTED value a trailing `#` comment is removed. Later
+ * definitions win, matching how both `bun` and `dotenv` load a file.
+ *
+ * The comment rule matters in practice: a template line like
+ * `SUPABASE_URL=# https://<project-ref>.supabase.co` carries no value at all, and
+ * reading the comment as the value would report phantom drift against whatever
+ * the process actually holds. A `#` only opens a comment when it starts the value
+ * or follows whitespace, so `pass#word` and `https://host/#anchor` survive intact,
+ * and a quoted value is never touched.
+ *
+ * Returns an empty map when the file does not exist — callers decide whether an
+ * absent `.env` is a skip (CI) or an error.
+ */
+export function parseDotEnvPairs(envPath: string): Map<string, string> {
+  const pairs = new Map<string, string>();
+  if (!fs.existsSync(envPath)) { return pairs; }
+  const raw = fs.readFileSync(envPath, 'utf8');
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed === '' || trimmed.startsWith('#') || trimmed.startsWith('*')) {
+      continue;
+    }
+    const eq = trimmed.indexOf('=');
+    if (eq <= 0) {
+      continue;
+    }
+    const lhs = trimmed.slice(0, eq).replace(/^export\s+/, '').trim();
+    if (!/^[a-z_]\w*$/i.test(lhs)) {
+      continue;
+    }
+    let value = trimmed.slice(eq + 1).trim();
+    const quoted = /^(['"])([\s\S]*)\1$/.exec(value);
+    if (quoted) { value = quoted[2]; }
+    else { value = value.replace(/(^|\s)#.*$/, '$1').trim(); }
+    pairs.set(lhs, value);
+  }
+  return pairs;
+}
+
+// ----------------------------------------------------------------------------
+// Validation (mirrors the spirit of validateComponentRegistry in
+// cli/update-boilerplate.ts → updater-core.ts: pure, fails fast on a malformed
+// registry before any consumer relies on it).
+// ----------------------------------------------------------------------------
+
+const VALID_DESTINATIONS: readonly VarDestination[] = ['local', 'github'];
+const ENV_VAR_NAME = /^[A-Z][A-Z0-9_]*$/;
+
+/**
+ * Error thrown when the variable manifest is structurally invalid.
+ */
+export class VarManifestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'VarManifestError';
+  }
+}
+
+/**
+ * Validate `VAR_MANIFEST`. Throws `VarManifestError` on the first problem found:
+ *   - duplicate `name`
+ *   - empty / malformed `name`
+ *   - empty `destinations`, unknown destination, or duplicate destination
+ *   - malformed conditional-required clause (`{ ifEnv }` without a `KEY=VALUE`)
+ *   - empty `note`
+ *
+ * Pure / no I/O — safe to call at module load or startup so a bad entry fails
+ * fast before install/doctor/update consume it.
+ */
+export function validateVarManifest(manifest: readonly VarSpec[] = VAR_MANIFEST): void {
+  const seen = new Set<string>();
+  for (const spec of manifest) {
+    if (typeof spec.name !== 'string' || !ENV_VAR_NAME.test(spec.name)) {
+      throw new VarManifestError(
+        `Invalid var name '${String(spec.name)}'. Names must be UPPER_SNAKE_CASE (^[A-Z][A-Z0-9_]*$).`,
+      );
+    }
+    if (seen.has(spec.name)) {
+      throw new VarManifestError(`Duplicate var '${spec.name}' in VAR_MANIFEST.`);
+    }
+    seen.add(spec.name);
+
+    if (!Array.isArray(spec.destinations) || spec.destinations.length === 0) {
+      throw new VarManifestError(`Var '${spec.name}' has empty 'destinations'.`);
+    }
+    const destSeen = new Set<VarDestination>();
+    for (const dest of spec.destinations) {
+      if (!VALID_DESTINATIONS.includes(dest)) {
+        throw new VarManifestError(
+          `Var '${spec.name}' has unknown destination '${String(dest)}'. Valid: ${VALID_DESTINATIONS.join(', ')}.`,
+        );
+      }
+      if (destSeen.has(dest)) {
+        throw new VarManifestError(`Var '${spec.name}' lists destination '${dest}' more than once.`);
+      }
+      destSeen.add(dest);
+    }
+
+    // A var sourced OUTSIDE `.env` must never also be written INTO it — that
+    // would re-create the second copy this whole design exists to remove.
+    //
+    // Only this direction is enforced. The converse ("env-file source implies a
+    // local destination") holds in the DEV sibling but NOT here: this repo has a
+    // legitimate CI-only category — AUTO_SYNC, SLACK_WEBHOOK_URL — that lives in
+    // GitHub secrets and never in `.env`. Asserting it would reject them.
+    if (valueSourceOf(spec) !== 'env-file' && spec.destinations.includes('local')) {
+      throw new VarManifestError(
+        `Var '${spec.name}' declares valueSource '${valueSourceOf(spec)}' but also targets 'local'. `
+        + 'A var sourced outside .env must never be written back into it.',
+      );
+    }
+
+    if (typeof spec.secret !== 'boolean') {
+      throw new VarManifestError(`Var '${spec.name}' has non-boolean 'secret'.`);
+    }
+
+    if (typeof spec.required !== 'boolean') {
+      if (!spec.required || typeof spec.required !== 'object' || !('ifEnv' in spec.required)) {
+        throw new VarManifestError(`Var '${spec.name}' has invalid 'required' (expected boolean | { ifEnv }).`);
+      }
+      const clause = spec.required.ifEnv;
+      if (typeof clause !== 'string' || !clause.includes('=') || clause.indexOf('=') === 0) {
+        throw new VarManifestError(
+          `Var '${spec.name}' has malformed 'required.ifEnv' (expected 'KEY=VALUE'): '${String(clause)}'.`,
+        );
+      }
+    }
+
+    if (typeof spec.critical !== 'boolean') {
+      throw new VarManifestError(`Var '${spec.name}' has non-boolean 'critical'.`);
+    }
+    // NON-critical vars must explain where to get them (the closing next-steps
+    // list relies on this). CRITICAL vars are prompted with their own day-0
+    // notes, so an obtainHint is optional for them.
+    if (!spec.critical && (typeof spec.obtainHint !== 'string' || spec.obtainHint.trim() === '')) {
+      throw new VarManifestError(`Non-critical var '${spec.name}' is missing a non-empty 'obtainHint'.`);
+    }
+    if (spec.obtainHint !== undefined && typeof spec.obtainHint !== 'string') {
+      throw new VarManifestError(`Var '${spec.name}' has non-string 'obtainHint'.`);
+    }
+    if (spec.defaultValue !== undefined && typeof spec.defaultValue !== 'string') {
+      throw new VarManifestError(`Var '${spec.name}' has non-string 'defaultValue'.`);
+    }
+
+    if (typeof spec.note !== 'string' || spec.note.trim() === '') {
+      throw new VarManifestError(`Var '${spec.name}' has empty 'note'.`);
+    }
+  }
+}

@@ -1,0 +1,413 @@
+# Context Engineering — how this repo loads context for the AI
+
+> **Purpose**: Explain the context engineering strategy for AI-driven test automation. Top-level reference alongside `README.md`, `AGENTS.md`, and `INSTALLER.md`.
+> **Audience**: Humans learning the system + AI when needing to understand "why".
+> **Related**: `AGENTS.md` contains the operational context loaded each session. It is the only instruction body in the repo; `CLAUDE.md` is a one-line shim (`@AGENTS.md`) that Claude Code follows to reach it. Operational prose belongs in `AGENTS.md` — never in the shim. See §2.1 below.
+> **Sync**: This file is in scope of `/sync-ai-memory` — re-run it whenever the context architecture changes.
+
+---
+
+## 1. What is Context Engineering?
+
+**Context Engineering** is the practice of structuring information so AI assistants can work effectively on a codebase. Instead of the AI reading everything (expensive, slow), we provide curated context based on the task.
+
+### Core Principles
+
+| Principle | Description |
+|-----------|-------------|
+| **Token Efficiency** | Load only what's needed for the current task |
+| **Progressive Loading** | Start with summary, load details on demand |
+| **Context Relevance** | Different tasks need different context |
+| **Single Source of Truth** | One place for each type of information |
+| **Tool-Agnostic Context** | `.agents/` holds the shared substrate — instructions, skills, hook emitter, alias manifest — consumed by every supported harness. Harness-specific directories (`.claude/`, `.opencode/`, `.codex/`) hold only thin adapters and generated artifacts, never a second copy of the content. |
+
+---
+
+## 2. Repository Philosophy
+
+This repository separates concerns into distinct directories, each with a specific purpose:
+
+```
+agentic-qa-boilerplate/
+│
+├── AGENTS.md               → Project memory: the only instruction body (loaded every session)
+├── .agents/
+│   ├── project.yaml        → Tool-agnostic project + Jira config (any harness reads this)
+│   ├── skills/             → Workflow skills (task instructions + references) — 19, committed
+│   ├── compatibility/      → Slash-command alias manifest (source for every wrapper)
+│   └── hooks/              → Shared personality-reinject emitter (one file, three adapters)
+├── .context/               → Documentation THAT the AI reads (context)
+├── docs/                   → Documentation for humans
+└── tests/                  → KATA Architecture implementation
+```
+
+### Why This Separation?
+
+| Directory | Contains | When Loaded |
+|-----------|----------|-------------|
+| `AGENTS.md` | Operational rules + project state | Every session automatically |
+| `.agents/project.yaml` + Jira catalogs | Tool-agnostic project config (`project.yaml`, `jira-fields.json`, `jira-required.yaml`) | When the AI needs to resolve `{{VAR}}` or `{{jira.<slug>}}` |
+| `.agents/skills/` | Task instructions + references (what to do, step by step) | When AI loads a skill for a specific task |
+| `.context/` | Facts about the system (what exists, how it works) | When AI needs to understand the system |
+| `docs/` | Learning material for humans | When humans need to learn |
+
+### 2.1 Host harnesses: one source, three consumers
+
+The repo runs on **Claude Code, OpenCode, and Codex (CLI + Desktop)**. There is exactly one copy of every instruction and every skill. Where the harnesses genuinely differ — MCP file format, hook API, whether slash commands exist at all — each keeps a thin versioned adapter. Nothing is duplicated.
+
+> Visual walkthrough: [**Una fuente, tres harnesses**](https://upex-galaxy.github.io/agentic-qa-boilerplate/harnesses.es.html) (Spanish, published page with diagrams).
+
+| Surface | Claude Code | OpenCode | Codex CLI + Desktop |
+|---------|-------------|----------|---------------------|
+| **Instructions** | `CLAUDE.md` → `@AGENTS.md` **[generated shim]** | `AGENTS.md` (native) | `AGENTS.md` (native) |
+| **Skills** | `.claude/skills` **[generated alias]** | `.agents/skills/` (native) | `.agents/skills/` (native) |
+| **Commands** | `.claude/commands/*.md` **[generated]** | `.opencode/commands/*.md` **[generated]** | none — invoke the skill directly |
+| **Hook** | `.claude/settings.json` → `UserPromptSubmit` | `.opencode/plugins/personality-reinject.js` | `.codex/hooks.json` → `UserPromptSubmit` |
+| **MCP** | `.mcp.json` | `opencode.jsonc` | `.codex/config.toml` |
+
+**Instructions.** `AGENTS.md` is the only instruction body. OpenCode and Codex load it natively. Claude Code loads `CLAUDE.md`, which is exactly `@AGENTS.md` plus one newline — a documented import rather than a symlink, so it survives a Windows checkout. Writing operational prose into `CLAUDE.md` is structural drift, and `/sync-ai-memory` stops rather than propagating it.
+
+**Skills.** All 19 skills live committed under `.agents/skills/`. OpenCode and Codex discover that directory natively. Claude Code reaches the same tree through `.claude/skills`, a POSIX symlink (Windows junction) that is **generated and gitignored** — never committed, never hand-edited.
+
+**Commands.** The 10 slash commands carry no workflow body. `.claude/commands/*.md` and `.opencode/commands/*.md` are 7-line wrappers generated from `.agents/compatibility/command-aliases.json`, overlaid by the optional project manifest `command-aliases.project.json`; each names a target skill plus a mode and forwards `$ARGUMENTS` unchanged. Codex has no wrapper layer: it invokes the skill directly. A wrapper that grows a body fails the compatibility check as `contains workflow prose`; a wrapper file no manifest produced fails by name.
+
+**Hook.** `.agents/hooks/personality-reinject.mjs` holds the contract text once. Claude and Codex run it as a command hook; OpenCode imports the constant from a thin plugin. The contract is enforced by `cli/lib/agent-compatibility-contracts.ts`: no absolute personal paths, no duplicated hook file, OpenCode must mutate `output.system` in place.
+
+**MCP.** The canonical server set is whatever `.mcp.json` declares (`context7`, `tavily`, `playwright`, `dbhub`, `openapi`, `postman` out of the box); every server there must exist in the other two configs. Parity is checked semantically: each native format (JSON / JSONC / TOML) is normalized into a common shape and compared on the `.env` variables each server depends on and on its literal settings, so a server missing from one host, or present in one host only, is a failure. The six boilerplate-known ids additionally get a strict per-host shape check when the project declares them; any other server gets the generic check only. Codex never expands `${VAR}`, so `.codex/config.toml` names every secret by variable (`bearer_token_env_var`, `env_vars`).
+
+**Generated versus versioned (hard rule).** Every bold `[generated]` cell above is output. Edit the source, then regenerate:
+
+| Generated artifact | Its source | Regenerate |
+|--------------------|------------|------------|
+| `CLAUDE.md` (one-line `@AGENTS.md` shim) | `AGENTS.md` | `bun run agents:compat` |
+| `.claude/skills` (POSIX symlink / Windows junction) | `.agents/skills/` | `bun run agents:compat` |
+| One Claude + one OpenCode wrapper per alias (10 upstream, plus any project-declared) | `.agents/compatibility/command-aliases.json`, overlaid by the optional `command-aliases.project.json` | `bun run agents:compat` |
+
+`bun run agents:compat:check` validates the whole contract (shim bytes, alias target, both wrapper sets byte-for-byte against the merged manifest, hook adapters, MCP parity), prints the alias status line on every run and groups errors per surface. It runs inside `bun run repo:check`, in the pre-push hook, and conditionally in pre-commit.
+
+**Project-owned commands and the updater.** A project declares its own slash commands in `.agents/compatibility/command-aliases.project.json` (same schema, optional, never synced): upstream aliases first, overlay overrides by `alias` name or adds, `wrapperHosts` from upstream. A wrapper file no manifest produced fails the check by name instead of being ignored. `bun run up` (8.2) closes with one "Estado por superficie" table (10 rows) and ONE parity prompt saved to `.agents/prompts/parity-plan.md`: numbered rows with evidence, one per path, each awaiting `keep project | take upstream | merge` before the AI edits anything; `take upstream` is suggested only where the project lacks the content entirely, and every `merge` on a watched file says what to port and what to keep. `--strict` turns a blocking parity finding into exit 1; an aborted run prints `Abortado.` and exits 1; `.claude/settings.json`, `.codex/` and the husky hooks ship once when missing and then sit on the protected watchlist next to `AGENTS.md`, `.mcp.json`, `opencode.jsonc` and `.codex/config.toml`, never overwritten. A project extends that watchlist through `updater.protected_paths` in `.agents/project.yaml`. On the migration run the `.claude/skills` alias waits for the migration commit (`bun run agents:compat` creates it).
+
+**Two harness-specific facts worth knowing.** Codex loads project `.codex/` config and hooks only in a repository marked trusted, and `bun run setup:doctor` reports that trust separately because it is runtime state no file read can verify. Codex Desktop consumes the same repository config as the CLI — no second convention, no extra directory.
+
+---
+
+## 3. Variable & Config Substrate
+
+Skills, commands, templates and docs reference dynamic values through three distinct variable syntaxes. They are NOT interchangeable, and they resolve from different files.
+
+### Files in `.agents/`
+
+| File | Role | Edited by | Regenerated with |
+|------|------|-----------|------------------|
+| `.agents/project.yaml` | Per-project static config: name, repo paths, URLs (per environment), MCP server names, issue-tracker metadata, default env. | Project owner (one-time) | `bun run agents:setup` (interactive) or by hand |
+| `.agents/jira-fields.json` | Auto-generated catalog of every custom field in your Jira workspace, keyed by canonical slug. | Generated only — never edit by hand | `bun run jira:sync-fields` |
+| `.agents/jira-required.yaml` | Declarative manifest of the Jira custom fields the methodology requires (with expected types, option lists, consumers). | Methodology maintainers | Updated when a skill adds or drops a `{{jira.<slug>}}` reference |
+| `.agents/README.md` | The contract: explains the three variable syntaxes and how the resolver, linter and `jira:check` cooperate. | Methodology maintainers | — |
+
+### The three variable syntaxes
+
+| Syntax | Meaning | Resolves from |
+|--------|---------|---------------|
+| `{{VAR_NAME}}` | **Project variable** — static per-repo value. Two flavours: **flat** (top-level section, e.g. `{{PROJECT_KEY}}` -> `project.project_key`) and **env-scoped** (`{{WEB_URL}}`, `{{API_URL}}`, `{{DB_MCP}}`, `{{API_MCP}}`) which resolve to the active environment's value. | `.agents/project.yaml` |
+| `<<VAR_NAME>>` | **Session variable** — computed at runtime by the calling skill or command (e.g. `<<ISSUE_KEY>>` extracted from a git branch name). Never persisted, never declared. | The skill / command's runtime context |
+| `{{jira.<slug>}}` | **Jira custom field reference** — portable pointer to a Jira custom field. Skills never hardcode `customfield_XXXXX`. | `.agents/jira-required.yaml` (canonical declaration) AND `.agents/jira-fields.json` (workspace-resolved IDs) |
+
+For explicit cross-env references in multi-env documents (rare), the form `{{environments.<env>.<var>}}` (e.g. `{{environments.local.web_url}}`) bypasses active-env resolution. See `.agents/README.md` for the complete contract.
+
+### `.env` vs `.agents/project.yaml` — two systems by design
+
+The boilerplate intentionally separates two configuration substrates. They have different consumers, different lifecycles, and **must not be conflated**.
+
+| | `.env` | `.agents/project.yaml` |
+|--|--------|------------------------|
+| **Purpose** | Playwright / KATA **runtime** secrets and config | AI **context-engineering** variables for `{{VAR}}` resolution |
+| **Consumers** | The test runner (`bun run test`, fixtures, login helpers) | AI agents (Claude Code, Cursor, Codex, Copilot, OpenCode) — when resolving skill / template / doc references |
+| **Examples** | `LOCAL_USER_EMAIL`, `STAGING_USER_PASSWORD`, `XRAY_CLIENT_SECRET`, `ATLASSIAN_API_TOKEN`, `HEADLESS`, `DEFAULT_TIMEOUT` | `PROJECT_KEY`, `WEB_URL`, `API_URL`, `ATLASSIAN_URL`, `DB_MCP`, `default_env` |
+| **Secrets?** | Yes (passwords, tokens, API keys) | No — must remain commit-safe |
+| **Committed?** | Gitignored (`.env.example` is committed as a template) | Committed |
+| **Lifecycle** | Edited per developer / per CI runner | Edited once when adopting the boilerplate; rarely changes after |
+
+Two systems, two consumers, two lifecycles. Use the right substrate for the right value — secrets in `.env`, AI context in `.agents/project.yaml`.
+
+---
+
+## 4. Directory Structure
+
+### .context/ - AI Context
+
+```
+.context/
+├── PRD/                       → Product Requirements (generated)
+├── SRS/                       → Software Requirements (generated)
+│
+├── ADR/                       → Architecture Decision Records — test architecture (append-only, never regenerated)
+│   ├── README.md                  → When-to-write (two-gate) + status lifecycle + index
+│   └── ADR-NNNN-template.md       → Copy → ADR-NNNN-<slug>.md per decision (supersede, never delete)
+│
+├── PBI/                       → Per-module + per-ticket context — GITIGNORED cache of Jira
+│                                 rebuild: `bun run context:hydrate` · committed exceptions: README.md,
+│                                 templates/, epics/*/test-specs/ (see .context/PBI/README.md)
+│
+├── business/                   → Business maps (command-generated)
+│   ├── business-data-map.md       → System flows + entities        (/business-data-map)
+│   ├── business-feature-map.md    → Feature catalog + CRUD matrix  (/business-feature-map)
+│   └── business-api-map.md        → Auth model + critical API      (/business-api-map)
+│
+├── reports/                   → Run artifacts: regression reports, GO/NO-GO verdicts, analysis output
+└── master-test-plan.md        → What to test and why                (/master-test-plan)
+```
+
+> **TMS configuration**: modality (Xray vs Jira-native) is derived from `.agents/project.yaml` `testing.tms_cli`. Regression Epic and label taxonomy are auto-discovered live by `/test-documentation` Phase 0 + Preflight. IQL methodology reference lives in `docs/methodology/jira-platform.md`.
+
+Workflow instructions and role-specific guidelines (TAE, QA, MCP usage) now live inside agent skills under `.agents/skills/`.
+
+### .agents/skills/ - AI Operations Center
+
+Nineteen skills, all committed here. OpenCode and Codex read this directory directly; Claude Code reaches it through the generated `.claude/skills` alias (§2.1).
+
+```
+.agents/skills/
+├── agentic-qa-core/         → Foundation: passive reference host (briefing template, dispatch patterns, orchestration doctrine, skill-composition strategy, Skill Resolver protocol). Cited on demand by workflow skills.
+├── agentic-qa-onboard/      → First-time orientation tour: stack + 6-stage pipeline + MCPs. Hands off to the right downstream skill.
+├── framework-development/   → Framework-evolution orchestrator for the boilerplate itself (KATA bases, fixtures, cli/, scripts/, api/schemas/ pipeline). Self-contained Plan → Code → Verify → Archive pipeline. NOT for per-ticket QA.
+├── project-discovery/       → 4-phase reverse-engineering, generates `.context/` artifacts. README/`AGENTS.md` upkeep is `/sync-ai-memory`. Foundation files (`AGENTS.md`, `.agents/`, `scripts/`) ship with the boilerplate and are not generated per project.
+├── shift-left-testing/      → Stage 0: pre-sprint AC refinement on a batch of backlog Stories. Refines ACs, surfaces gaps, drafts ATP, transitions backlog → shift_left_qa → estimation. Adds label shift-left-reviewed so /sprint-testing Stage 1 can short-circuit later.
+├── sprint-testing/          → In-sprint QA (planning + execution + reporting, per ticket)
+├── test-documentation/      → TMS documentation + test prioritization
+├── test-automation/         → KATA test planning + coding + review
+├── regression-testing/      → Regression execution + GO/NO-GO
+├── project-context/         → Regenerates the business data / feature / API maps and the master test plan (modes behind the legacy `/business-*-map` and `/master-test-plan` aliases).
+├── adapt-framework/         → Idempotent KATA adaptation: no-write analysis and plan first, mutation only after explicit approval.
+├── jira-administration/     → Components reconciliation + Atlassian instance migration, each sealed behind read-first analysis.
+├── sync-ai-context/         → Synchronizes the AI-critical repo docs against the canonical instructions, skills, aliases and `package.json`.
+├── git-flow-master/         → End-to-end Git operator: branch / commit / push / PR / conflict / chained-PR. Auto-detects branching strategy.
+├── pr-review-lead/          → QA Lead review of a PR's test-automation work against KATA doctrine, every finding grounded in a citation.
+├── bug-screenshot-annotation/ → Turns a raw bug screenshot into annotated evidence, rendered 100% locally.
+├── judgment-day/            → T2 vendored from gentle-ai (Apache-2.0): adversarial dual-judge review. Cited as optional gate by `/test-automation` Phase 3 + `/git-flow-master` pre-PR.
+├── acli/                    → Atlassian CLI skill: Jira issue tracking + Modality jira-native TMS operations
+├── xray-cli/                → Xray TMS helper
+└── REGISTRY.md              → Generated compact-rules cache (`bun run skills:registry`) — not a skill
+
+(community, installed by `cli/install.ts` — not committed in repo)
+  • playwright-cli/             → Browser automation CLI (screenshots, tracing, video, session mgmt)
+  • playwright-best-practices/  → Playwright + TS reference (flaky-test fixes, axe-core, auth/OAuth, perf budgets, i18n, component testing)
+  • resend-cli/                 → Resend email testing CLI (pairs with the `resend` binary)
+```
+
+**Key Skills**:
+- `agentic-qa-core` - Passive reference host cited by other skills (no direct invocation)
+- `/test-automation` - KATA test writing pipeline
+- `/sprint-testing` - End-to-end in-sprint QA
+- `/project-discovery` - Generates `.context/` artifacts; pair with `/sync-ai-memory` for README / `AGENTS.md` upkeep
+- `/framework-development` - Evolves the boilerplate itself (KATA bases, fixtures, cli/, scripts/)
+
+### docs/ - Human Documentation
+
+```
+docs/
+├── agentic-quality-engineering.md → Top-level entry point: vision, principles, lifecycle overview
+├── architectures/                 → Target application architecture
+├── methodology/                   → Testing methodology (IQL, KATA phases)
+├── setup/                         → Setup guides (MCP, tools)
+├── testing/                       → Testing guides (API, DB, automation)
+└── workflows/                     → Workflow guides (git, environments)
+```
+
+> Context engineering strategy has moved to `CONTEXT.md` at the repo root (alongside `README.md`, `AGENTS.md`, `INSTALLER.md`).
+
+### tests/ - KATA Implementation
+
+```
+tests/
+├── components/          → KATA components (Layers 1-4)
+│   ├── TestContext.ts   → Layer 1: Config, Faker, utilities
+│   ├── api/             → Layers 2-3: ApiBase + domain APIs
+│   ├── ui/              → Layers 2-3: UiBase + domain pages
+│   ├── steps/           → Reusable ATC chains
+│   └── TestFixture.ts   → Layer 4: Dependency injection
+│
+├── e2e/                 → E2E tests (UI + API)
+├── integration/         → Integration tests (API only)
+├── data/                → Test data (fixtures, uploads)
+└── utils/               → Decorators, reporters
+```
+
+---
+
+## 5. Key Files (Stable Names)
+
+These files have stable names and locations. Reference them confidently:
+
+| File / Skill | Purpose |
+|--------------|---------|
+| `AGENTS.md` | Project memory, loaded every session — the only instruction body |
+| `CLAUDE.md` | One-line shim (`@AGENTS.md`) so Claude Code reaches `AGENTS.md`. Never holds prose of its own |
+| `.agents/compatibility/command-aliases.json` | Manifest behind every generated slash-command wrapper (`bun run agents:compat`) |
+| `.agents/hooks/personality-reinject.mjs` | Shared hook emitter; the three harness adapters call into it |
+| `.agents/project.yaml` | Tool-agnostic project variables (`{{VAR}}` source of truth) |
+| `.agents/jira-required.yaml` | Manifest of Jira custom fields the methodology requires |
+| `.agents/jira-fields.json` | Auto-generated catalog of the workspace's Jira fields (`{{jira.<slug>}}` resolution) |
+| `agentic-qa-core/SKILL.md` | Foundation skill: bootstrap + shared references for every workflow skill |
+| `.context/ADR/README.md` | Test-architecture decision log — when to write one, status lifecycle, index (append-only) |
+| `/test-automation` skill | Entry point for writing tests (KATA) |
+| `/sprint-testing` skill | QA workflow orchestrator (plan + execute + report) |
+| `/project-discovery` skill | Generate project documentation + `.context/` |
+
+---
+
+## 6. Workflow Overview
+
+### One-Time Setup (Discovery)
+
+```
+Phase 0: Foundation      → bun run agents:setup   (interactive walkthrough of .agents/project.yaml)
+                          bun run jira:sync-fields (catalog Jira workspace fields)
+                          bun run jira:check     (validate against jira-required.yaml manifest)
+                          bun run vars:check     (verify every {{VAR}} and {{jira.<slug>}} resolves)
+Phase 1: Constitution    → Understand the business
+Phase 2: Architecture    → Document PRD + SRS
+Phase 3: Infrastructure  → Map technical stack
+Phase 4: Specification   → Connect to backlog
+```
+
+> Foundation files (`AGENTS.md`, `.agents/`, `scripts/`, `package.json`) ship with the boilerplate — clone the full repo rather than bootstrapping per project.
+
+**Output**: Populated `.agents/` config + `.context/` directories.
+
+### Context Generators
+
+After discovery, run these commands (orchestrated by `/project-discovery` or invoked individually — they are independent commands, not sub-skills):
+
+```
+/business-data-map          → .context/business/business-data-map.md
+/business-feature-map       → .context/business/business-feature-map.md
+/business-api-map           → .context/business/business-api-map.md
+/master-test-plan           → .context/master-test-plan.md
+bun run api:sync            → api/schemas/ (TypeScript types from OpenAPI)
+```
+
+> **`.context/ADR/` is the exception — append-only, never regenerated.** Architecture Decision Records are the one `.context/` artifact that is authored (by a human QA architect, or an AI workflow drafting for human approval — `/project-discovery` SRS/infra, `/framework-development`, `/sprint-testing` + `/test-automation` Stage 1) and **never re-run**. Each captures one important, hard-to-reverse test-architecture decision (runner, fixtures, isolation, auth-in-tests, selector contract, flake policy). Superseded by a newer ADR that links back — never overwritten or deleted. See `.context/ADR/README.md`.
+
+### QA Stages (Per User Story)
+
+| Stage | Activity | Skill |
+|-------|----------|-------|
+| **Stage 0** | Pre-sprint Shift-Left: AC refinement on backlog Stories, gap-spotting, pre-sprint ATP (outline maturity, authored into the `{{jira.acceptance_test_plan}}` field; the Test Plan item is created by `/sprint-testing` Stage 1), batch grooming | `/shift-left-testing` |
+| **Stage 1** | Planning (in-sprint, AC validation, full ATP; short-circuits Phases 1-3 if Stage 0 ran <30 days ago) | `/sprint-testing` |
+| **Stage 2** | Execution (exploratory + smoke + trifuerza) | `/sprint-testing` |
+| **Stage 3** | Reporting (ATR, QA comment, bug reports) | `/sprint-testing` |
+| **Stage 4** | TMS documentation + ROI prioritization (Candidate / Manual / Deferred) | `/test-documentation` |
+| **Stage 5** | Automation: plan → code → review (KATA on Playwright + TS) | `/test-automation` |
+| **Stage 6** | Regression execution + failure classification + GO/NO-GO | `/regression-testing` |
+| **Onboarding** | 4-phase reverse-engineering of an existing target repo | `/project-discovery` + `/adapt-framework` |
+
+---
+
+## 7. Orchestration as Context Engineering
+
+Token efficiency is not just about which files to load — it is also about which agent loads them. Subagent dispatch is a context-engineering tool: the main conversation stays lean and acts as command center, while focused subagents do heavy reading and work in their own context.
+
+The orchestration doctrine has three shared assets, all hosted by `agentic-qa-core`:
+
+| Asset | Path | Role |
+|-------|------|------|
+| **Orchestration doctrine** | `agentic-qa-core/references/orchestration-doctrine.md` | Cacheable mirror of `AGENTS.md` §3 "Orchestration Mode". Subagents load this instead of pulling the full `AGENTS.md`. |
+| **Briefing template** | `agentic-qa-core/references/briefing-template.md` | The canonical 7-component briefing format (Goal / Context docs / Project Standards (auto-resolved) / Skills to load / Exact instructions / Report format / Rules) with one filled example per dispatch pattern. |
+| **Dispatch patterns** | `agentic-qa-core/references/dispatch-patterns.md` | Decision guide and heuristic for picking Single / Sequential / Parallel / Background. |
+| **Skill Resolver Protocol** | `agentic-qa-core/references/skill-resolver.md` + `.agents/skills/REGISTRY.md` | Build-once-per-session compact-rules cache. Orchestrator runs `bun run skills:registry`, then pastes per-skill "Compact Rules" blocks into every briefing under `Project Standards (auto-resolved)`. Subagents trust these and skip re-reading full `SKILL.md`. Validated by `bun run skills:registry:check`. |
+
+Each workflow skill (`shift-left-testing`, `sprint-testing`, `test-documentation`, `test-automation`, `regression-testing`, `framework-development`) declares **its own dispatch points** in a `## Subagent Dispatch Strategy` section of its `SKILL.md`. That table maps each stage to its dispatch pattern and subagent role, so the AI knows up-front when to delegate and how to brief.
+
+Reference / utility / generator skills (`agentic-qa-core`, `acli`, `xray-cli`, `playwright-cli`, `project-discovery`, `adapt-framework`, the `business-*-map` and helper commands) are exempt from the dispatch-table requirement — they execute synchronously in-line.
+
+---
+
+## 8. Progressive Loading Strategy
+
+### By Task Type
+
+| Task | Load First | Load If Needed |
+|------|------------|----------------|
+| **Write E2E or API Test** | `/test-automation` (SKILL.md) | The skill's own `references/` (planning playbook, KATA patterns, etc.) |
+| **Pre-sprint AC refinement / backlog grooming** | `/shift-left-testing` (SKILL.md) + `.context/business/*` | Skill `references/` (backlog-selection, refinement-playbook, atp-outline-template) |
+| **Exploratory Testing** | `/sprint-testing` (SKILL.md) + `.context/master-test-plan.md` | Skill `references/` (exploration patterns, session entry points) |
+| **Understand System** | `.context/business/business-data-map.md` | `.context/business/*`, `.context/PRD/*`, `.context/SRS/*` |
+| **Use MCP** | `AGENTS.md` §5 "MCPs (decision rules)" + §6 "Tool Resolution" | The owning CLI skill (`/acli`, `/xray-cli`, `/playwright-cli`) |
+
+### By Role
+
+| Role | Primary Skill(s) |
+|------|------------------|
+| **Project Onboarding** | `/project-discovery` -> `/adapt-framework` |
+| **TAE (Test Automation)** | `/test-automation` |
+| **QA (Manual Testing)** | `/sprint-testing` + `/test-documentation` |
+| **DevOps** | `/regression-testing` |
+
+---
+
+## 9. Token Optimization Tips
+
+### DO
+
+- Load `AGENTS.md` first (automatic on every harness)
+- Load task-specific guidelines
+- Use skills from `.agents/skills/` for structured tasks
+- Reference code in `tests/components/` as living examples
+- From subagents, load `agentic-qa-core/references/orchestration-doctrine.md` instead of pulling full `AGENTS.md`
+
+### DON'T
+
+- Load all guidelines at once
+- Include full file trees in prompts
+- Duplicate information across files
+- Load PRD/SRS for simple test writing
+
+---
+
+## 10. Maintenance Guidelines
+
+### When to Update AGENTS.md
+
+- Project identity changes
+- New MCPs configured — add the server to all three configs (`.mcp.json`, `opencode.jsonc`, `.codex/config.toml`), then run `bun run agents:compat:check`
+- New CLI tools added
+- Testing decisions documented
+
+Never write the update into `CLAUDE.md`: it is a generated one-line shim, and `/sync-ai-memory` refuses to propagate prose from it.
+
+### When to Update the Harness Adapters
+
+- **New slash command (boilerplate)** → add the entry to `.agents/compatibility/command-aliases.json`, then `bun run agents:compat`. Never hand-write a wrapper under `.claude/commands/` or `.opencode/commands/`
+- **New slash command (a downstream project)** → declare it in `.agents/compatibility/command-aliases.project.json` (same schema; never synced by `bun run up`), then `bun run agents:compat`. A wrapper file neither manifest produced fails `agents:compat:check` by name
+- **New MCP server** → declare it in `.mcp.json` first, then mirror it in `opencode.jsonc` and `.codex/config.toml` with the same `.env` dependencies (Codex: `env_vars` / `bearer_token_env_var`, never `${VAR}`). `agents:compat:check` names the server and the host that lacks it
+- **New or renamed skill** → create it under `.agents/skills/`. Nothing else to do: OpenCode and Codex read it directly, Claude Code sees it through the generated alias
+- **Hook contract text changes** → edit `.agents/hooks/personality-reinject.mjs` only. The three adapters call into it and stay untouched
+
+### When to Update Skills
+
+- Framework patterns or conventions change (update the relevant skill's `references/`)
+- Workflow steps change (update the SKILL.md orchestration)
+- New outputs required or better instructions discovered
+
+### When to Record an ADR
+
+- A hard-to-reverse **test-architecture** decision is made (test runner, fixture / test-data strategy, isolation & parallelization model, auth-in-tests, selector contract, flake-retry policy)
+- It passes the two-gate test (architectural **AND** hard to reverse) → author `.context/ADR/ADR-NNNN-<slug>.md` (append-only; supersede, never edit). AI drafts `Proposed`; the human approves → `Accepted`
+- Ticket-local test trade-offs stay in the ticket's plan, not an ADR. Detection + authoring: `agentic-qa-core/references/adr-doctrine.md`; convention: `.context/ADR/README.md`
+
+---
+
+## Related Documentation
+
+- **AGENTS.md** - Operational context (project root), loaded by all three harnesses
+- **README.md** - Project overview for humans
+- `.agents/README.md` - Variable resolution contract (`{{VAR}}`, `<<VAR>>`, `{{jira.<slug>}}`)
+- `.context/ADR/README.md` - Test-architecture decision records (when to write one, status lifecycle, index)
+- `/test-automation` skill - KATA Architecture entry point
+- `.agents/skills/` - Workflow skills (each one self-describes via its SKILL.md)
+
+---
+
+> **You are here**: Context Engineering map for AI agents in the QA repo. **Read time**: 15 min. **Next**: [`docs/agentic-quality-engineering.md`](docs/agentic-quality-engineering.md).
+
+**Last Updated**: 2026-04-26

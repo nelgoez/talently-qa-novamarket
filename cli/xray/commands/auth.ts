@@ -1,0 +1,159 @@
+/**
+ * Xray CLI - Auth Commands
+ *
+ * Commands: login, logout, status
+ */
+
+import type { Flags } from '../types/index.js';
+import { existsSync, writeFileSync } from 'node:fs';
+import { normalizeAtlassianUrl, readAtlassianUrlFromYaml } from '../../lib/atlassian-instance';
+import { clearToken, configPaths, loadConfig, loadToken, saveConfig, saveToken } from '../lib/config.js';
+import { authenticate } from '../lib/graphql.js';
+import { log } from '../lib/logger.js';
+import { getFlag } from '../lib/parser.js';
+
+// ============================================================================
+// LOGIN
+// ============================================================================
+
+export async function login(flags: Flags): Promise<void> {
+  log.title('Xray CLI Authentication');
+
+  // Each credential resolves from its flag first, then the matching env var.
+  // Pass a flag only to OVERRIDE the environment (e.g. switching to another
+  // site mid-migration). With a populated .env, `auth login` needs no flags.
+  const clientId = getFlag(flags, 'client-id') || process.env.XRAY_CLIENT_ID;
+  const clientSecret = getFlag(flags, 'client-secret') || process.env.XRAY_CLIENT_SECRET;
+  const defaultProject = getFlag(flags, 'project');
+
+  // Optional Jira credentials for sync features.
+  //
+  // The HOST is the one value that does not follow the flag-then-env rule above:
+  // it resolves from `.agents/project.yaml` -> issue_tracker.atlassian_url before
+  // falling back to `ATLASSIAN_URL` (no longer a .env variable — last resort
+  // only). `login` PERSISTS whatever it picks into the
+  // machine-global `~/.xray-cli/config.json`, which then outlives the repo and is
+  // never revisited — seeding it from a stale env value bakes the wrong site into
+  // a cache no diff will ever show. An explicit `--jira-url` still wins, since
+  // that is a deliberate override. Rationale: cli/lib/atlassian-instance.ts.
+  const jiraBaseUrl = normalizeAtlassianUrl(getFlag(flags, 'jira-url'))
+    ?? readAtlassianUrlFromYaml()
+    ?? normalizeAtlassianUrl(process.env.ATLASSIAN_URL);
+  const jiraEmail = getFlag(flags, 'jira-email') || process.env.ATLASSIAN_EMAIL;
+  const jiraApiToken = getFlag(flags, 'jira-token') || process.env.ATLASSIAN_API_TOKEN;
+
+  // Surface where each credential came from so the user knows whether the
+  // environment or a flag is in effect.
+  const src = (flag: string, env: string): string => (getFlag(flags, flag) ? 'flag' : process.env[env] ? 'env' : 'unset');
+  // jira-url has its own three-tier precedence, so it cannot use `src`.
+  const jiraUrlSrc = getFlag(flags, 'jira-url')
+    ? 'flag'
+    : readAtlassianUrlFromYaml()
+      ? 'project.yaml'
+      : process.env.ATLASSIAN_URL ? 'env' : 'unset';
+  log.dim(
+    `Credentials: client-id=${src('client-id', 'XRAY_CLIENT_ID')}, `
+    + `client-secret=${src('client-secret', 'XRAY_CLIENT_SECRET')}, `
+    + `jira-url=${jiraUrlSrc}, `
+    + `jira-email=${src('jira-email', 'ATLASSIAN_EMAIL')}, `
+    + `jira-token=${src('jira-token', 'ATLASSIAN_API_TOKEN')}`,
+  );
+
+  if (!clientId || !clientSecret) {
+    log.error('Missing credentials. Provide them via flags or environment variables:');
+    console.log(`
+  Option 1 - Flags:
+    xray auth login --client-id YOUR_ID --client-secret YOUR_SECRET
+
+  Option 2 - Environment variables:
+    export XRAY_CLIENT_ID="YOUR_ID"
+    export XRAY_CLIENT_SECRET="YOUR_SECRET"
+    xray auth login
+
+  Get your API keys from: Jira → Apps → Xray → Settings → API Keys
+
+  Don't see that screen? Then you do not administer Xray on this instance, and
+  retrying will not produce a key. Ask whoever owns the Xray app for a
+  client-id / client-secret pair and put them in .env as XRAY_CLIENT_ID /
+  XRAY_CLIENT_SECRET — that is where every script here reads them from.
+
+  While you wait, everything that does NOT touch Xray still works:
+    bun run jira:sync-issues get <KEY>   read tickets, ACs, comments
+    bun run test                         run the suite
+    bun run tests:map                    coverage map from the local cache
+  Test cases can also live as Jira Test issues (Modality jira-native) and be
+  imported into Xray later. This credential blocks the Xray write-path, not QA.
+
+  Optional Jira credentials (for backup restore --sync):
+    --jira-url <url>       Jira base URL (e.g., https://company.atlassian.net)
+    --jira-email <email>   Jira account email
+    --jira-token <token>   Jira API token (from id.atlassian.com)
+`);
+    throw new Error('Client ID and Client Secret are required');
+  }
+
+  log.dim('Authenticating with Xray...');
+  const token = await authenticate(clientId, clientSecret);
+
+  saveConfig({
+    client_id: clientId,
+    client_secret: clientSecret,
+    default_project: defaultProject,
+    jira_base_url: jiraBaseUrl ?? undefined,
+    jira_email: jiraEmail,
+    jira_api_token: jiraApiToken,
+  });
+
+  saveToken(token);
+
+  log.success('Successfully logged in to Xray Cloud');
+  if (jiraBaseUrl && jiraEmail && jiraApiToken) {
+    log.success('Jira REST API credentials saved (for sync features)');
+  }
+  log.dim(`Config saved to: ${configPaths.file}`);
+}
+
+// ============================================================================
+// LOGOUT
+// ============================================================================
+
+export async function logout(): Promise<void> {
+  clearToken();
+  if (existsSync(configPaths.file)) {
+    writeFileSync(configPaths.file, '');
+  }
+  log.success('Logged out successfully');
+}
+
+// ============================================================================
+// STATUS
+// ============================================================================
+
+export async function status(): Promise<void> {
+  const config = loadConfig();
+  const token = loadToken();
+
+  if (!config) {
+    log.warn('Not logged in');
+    return;
+  }
+
+  log.title('Xray CLI Status');
+  console.log(`Client ID: ${config.client_id.slice(0, 8)}...`);
+
+  if (config.default_project) {
+    console.log(`Default Project: ${config.default_project}`);
+  }
+
+  if (config.jira_base_url) {
+    console.log(`Jira URL: ${config.jira_base_url}`);
+  }
+
+  if (token) {
+    const expiresIn = Math.round((token.expires_at - Date.now()) / 1000 / 60 / 60);
+    log.success(`Token valid (expires in ~${expiresIn}h)`);
+  }
+  else {
+    log.warn('Token expired (will refresh on next request)');
+  }
+}
