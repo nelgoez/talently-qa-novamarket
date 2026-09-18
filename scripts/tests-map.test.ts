@@ -6,236 +6,218 @@ import { describe, expect, test } from 'bun:test';
 
 import {
   computeGaps,
-  groupByComponent,
-  loadPbiTree,
+  groupByLabel,
+  loadTrelloTree,
+  parseCard,
+  parseCheckItems,
   parseHeaderField,
-  parseIssueTitle,
-  parseJiraKeyField,
-  parseSyncedName,
-  parseTestMarkdown,
-  statusTone,
+  sectionOf,
 } from './tests-map.ts';
 
 // ============================================================================
-// FIXTURE BUILDERS — synthetic markdown in the exact shape generateTestMarkdown
-// (sync-jira-issues.ts) writes. Deliberately NOT the live BK cache, which
-// changes on every hydrate.
+// FIXTURE BUILDERS — synthetic card.md in the exact shape formatCardMarkdown
+// (sync-trello.ts) writes. Deliberately NOT the live board cache, which changes
+// on every sync.
 // ============================================================================
 
-function testMd(over: { key?: string, summary?: string, status?: string, components?: string } = {}): string {
-  return [
-    `# TEST: ${over.summary ?? 'TC1: should log in'}`,
+function cardMd(over: {
+  title?: string
+  number?: number
+  slug?: string
+  labels?: string
+  list?: string
+  checklist?: boolean
+  complete?: string[]
+} = {}): string {
+  const lines = [
+    `# ${over.title ?? 'Definir alcance UX/UI'}`,
     '',
-    `**Jira Key:** [${over.key ?? 'PROJ-10'}](https://example.atlassian.net/browse/${over.key ?? 'PROJ-10'})`,
-    `**Status:** ${over.status ?? 'AUTOMATED'}`,
-    `**Components:** ${over.components ?? 'None'}`,
+    `**Trello Card:** ${over.number ?? 9}`,
+    `**Slug:** ${over.slug ?? 'QA-9'}`,
+    '**Short URL:** https://trello.com/c/abc123',
+    `**List:** ${over.list ?? 'En curso'}`,
+    `**Labels:** ${over.labels ?? 'Qa'}`,
     '',
     '---',
     '',
-    '## Test Description',
+    '## Description',
     '',
-    'steps here',
+    'desc here',
     '',
-  ].join('\n');
-}
-
-function issueMd(title: string, key: string, status: string): string {
-  return [
-    `# ${title}`,
+    '## Checklists',
     '',
-    `**Jira Key:** [${key}](https://example.atlassian.net/browse/${key})`,
-    `**Status:** ${status}`,
-    '',
-  ].join('\n');
+  ];
+  if (over.checklist === false) {
+    lines.push('_No checklists — acceptance criteria not yet defined._');
+  }
+  else {
+    lines.push('### AC', '');
+    lines.push(`- [${over.complete?.includes('item1') ? 'x' : ' '}] (item1) First AC`);
+    lines.push(`- [${over.complete?.includes('item2') ? 'x' : ' '}] (item2) Second AC`);
+  }
+  lines.push('', '## Attachments', '', '_None._');
+  return lines.join('\n');
 }
 
 describe('parseHeaderField', () => {
   test('extracts a bold-label header line', () => {
-    expect(parseHeaderField('**Status:** In Design\n', 'Status')).toBe('In Design');
+    expect(parseHeaderField('**Labels:** Qa\n', 'Labels')).toBe('Qa');
   });
 
   test('returns null when the label is absent', () => {
-    expect(parseHeaderField('# Title\n\nbody', 'Status')).toBeNull();
+    expect(parseHeaderField('# Title\n\nbody', 'Labels')).toBeNull();
   });
 
   test('does not match the label mid-line', () => {
-    expect(parseHeaderField('see **Status:** ok', 'Status')).toBeNull();
+    expect(parseHeaderField('see **Labels:** ok', 'Labels')).toBeNull();
   });
 });
 
-describe('parseJiraKeyField', () => {
-  test('splits key and url out of the markdown link', () => {
-    const { key, url } = parseJiraKeyField('**Jira Key:** [BK-6](https://x.net/browse/BK-6)');
-    expect(key).toBe('BK-6');
-    expect(url).toBe('https://x.net/browse/BK-6');
+describe('sectionOf', () => {
+  test('returns the body of a h2 section', () => {
+    const content = '## Description\n\nhello\n\n## Checklists\n\nitems';
+    expect(sectionOf(content, 'Description')).toBe('hello');
   });
 
-  test('tolerates a bare key with no link', () => {
-    expect(parseJiraKeyField('**Jira Key:** BK-6')).toEqual({ key: 'BK-6', url: null });
-  });
-});
-
-describe('parseSyncedName', () => {
-  test('splits prefix, dashed Jira key, and slug', () => {
-    expect(parseSyncedName('EPIC-BK-1-tenancy-identity'))
-      .toEqual({ prefix: 'EPIC', key: 'BK-1', slug: 'tenancy-identity' });
+  test('does not leak into a following h3 subsection', () => {
+    const content = '## Checklists\n\n### AC\n\n- [ ] (x) y';
+    expect(sectionOf(content, 'Checklists')).toContain('### AC');
   });
 
-  test('handles a name with no slug', () => {
-    expect(parseSyncedName('TEST-PROJ-250')).toEqual({ prefix: 'TEST', key: 'PROJ-250', slug: '' });
-  });
-
-  test('rejects the _orphans bucket and other non-synced names', () => {
-    expect(parseSyncedName('_orphans')).toBeNull();
-    expect(parseSyncedName('templates')).toBeNull();
-    expect(parseSyncedName('stories')).toBeNull();
+  test('returns empty string when the section is absent', () => {
+    expect(sectionOf('## Description\n\nbody', 'Comments')).toBe('');
   });
 });
 
-describe('parseIssueTitle', () => {
-  test('strips the generator prefix from an epic heading', () => {
-    expect(parseIssueTitle('# EPIC: Tenancy & Identity\n\nbody')).toBe('Tenancy & Identity');
+describe('parseCard', () => {
+  test('parses the generated card header', () => {
+    const parsed = parseCard(cardMd({ number: 9, slug: 'QA-9', labels: 'Qa, Front' }), '9-card.md');
+    expect(parsed.key).toBe('QA-9');
+    expect(parsed.number).toBe(9);
+    expect(parsed.title).toBe('Definir alcance UX/UI');
+    expect(parsed.labels).toEqual(['Qa', 'Front']);
+    expect(parsed.url).toContain('https://trello.com/c/');
   });
 
-  test('strips only the first prefix from a TEST heading with inner colons', () => {
-    // Lazy match: "TEST: " goes, "BK-6: TC1: ..." stays — that IS the summary.
-    expect(parseIssueTitle('# TEST: BK-6: TC1: should switch\n')).toBe('BK-6: TC1: should switch');
+  test('"None" labels normalize to an empty list', () => {
+    expect(parseCard(cardMd({ labels: 'None' }), '9-card.md').labels).toEqual([]);
   });
 
-  test('leaves a story heading with no prefix untouched', () => {
-    expect(parseIssueTitle('# TMS-Workspace | Switch between workspaces')).toBe('TMS-Workspace | Switch between workspaces');
-  });
-});
-
-describe('parseTestMarkdown', () => {
-  test('parses the full generated header', () => {
-    const parsed = parseTestMarkdown(testMd({ key: 'BK-250', status: 'AUTOMATED', components: 'Tenancy & Identity, Billing' }), 'TEST-BK-250-x.md');
-    expect(parsed.key).toBe('BK-250');
-    expect(parsed.summary).toBe('TC1: should log in');
-    expect(parsed.status).toBe('AUTOMATED');
-    expect(parsed.components).toEqual(['Tenancy & Identity', 'Billing']);
-    expect(parsed.url).toContain('/browse/BK-250');
-  });
-
-  test('"None" components normalize to an empty list', () => {
-    expect(parseTestMarkdown(testMd({ components: 'None' }), 'TEST-PROJ-10-a.md').components).toEqual([]);
-  });
-
-  test('falls back to the filename key and Unknown status on a degenerate file', () => {
-    const parsed = parseTestMarkdown('just prose, no headers', 'TEST-BK-999-mystery.md');
-    expect(parsed.key).toBe('BK-999');
-    expect(parsed.status).toBe('Unknown');
-    expect(parsed.summary).toBe('TEST-BK-999-mystery');
-    expect(parsed.components).toEqual([]);
+  test('falls back to the filename number on a degenerate card', () => {
+    const parsed = parseCard('just prose, no headers', '42-mystery.md');
+    expect(parsed.number).toBe(42);
+    expect(parsed.key).toBe('42');
+    expect(parsed.title).toBe('42-mystery');
+    expect(parsed.labels).toEqual([]);
   });
 });
 
-describe('statusTone', () => {
-  test('maps statuses case-insensitively onto the palette', () => {
-    expect(statusTone('AUTOMATED')).toBe('good');
-    expect(statusTone('Deprecated')).toBe('bad');
-    expect(statusTone('Draft')).toBe('warn');
-    expect(statusTone('Candidate')).toBe('neutral');
+describe('parseCheckItems', () => {
+  test('parses item id, name, and complete state', () => {
+    const items = parseCheckItems(cardMd({ complete: ['item1'] }));
+    expect(items).toEqual([
+      { id: 'item1', name: 'First AC', complete: true },
+      { id: 'item2', name: 'Second AC', complete: false },
+    ]);
+  });
+
+  test('returns an empty list when there is no checklist', () => {
+    expect(parseCheckItems(cardMd({ checklist: false }))).toEqual([]);
+  });
+
+  test('ignores checkbox-like lines outside the Checklists section', () => {
+    const content = '## Description\n\n- [x] (nope) not an AC\n\n## Checklists\n\n- [ ] (real) an AC';
+    expect(parseCheckItems(content)).toEqual([{ id: 'real', name: 'an AC', complete: false }]);
   });
 });
 
 // ============================================================================
-// TREE LOADING + GAPS — synthetic tree in a tmpdir
+// TREE LOADING + GAPS — synthetic cache in a tmpdir
 // ============================================================================
 
 function buildSyntheticTree(): string {
-  const root = mkdtempSync(join(tmpdir(), 'tests-map-'));
-  const epicA = join(root, 'epics', 'EPIC-PROJ-1-checkout');
-  const covered = join(epicA, 'stories', 'STORY-PROJ-2-pay-with-card');
-  const uncovered = join(epicA, 'stories', 'STORY-PROJ-3-refund');
-  const epicB = join(root, 'epics', 'EPIC-PROJ-4-search'); // stories, zero tests
-  const bare = join(epicB, 'stories', 'STORY-PROJ-5-filter');
-  const epicC = join(root, 'epics', 'EPIC-PROJ-6-empty-shell'); // no stories
+  const root = mkdtempSync(join(tmpdir(), 'tests-map-trello-'));
+  mkdirSync(join(root, 'por-hacer'), { recursive: true });
+  mkdirSync(join(root, 'en-curso'), { recursive: true });
+  mkdirSync(join(root, 'finalizada'), { recursive: true }); // empty list
 
-  mkdirSync(join(covered, 'test-cases'), { recursive: true });
-  mkdirSync(uncovered, { recursive: true });
-  mkdirSync(bare, { recursive: true });
-  mkdirSync(join(epicC, 'stories'), { recursive: true });
-  mkdirSync(join(root, 'epics', '_orphans', 'tests'), { recursive: true });
-  mkdirSync(join(root, 'bugs', 'BUG-PROJ-50-broken-total', 'test-cases'), { recursive: true });
+  writeFileSync(join(root, 'por-hacer', '2-card.md'), cardMd({ title: 'Relevar vistas', number: 2, slug: 'FRONT-2', labels: 'Front', list: 'Por hacer', complete: ['item1', 'item2'] }));
+  writeFileSync(join(root, 'en-curso', '9-card.md'), cardMd({ title: 'Definir alcance UX', number: 9, slug: 'QA-9', labels: 'Qa', list: 'En curso', complete: ['item1'] }));
+  writeFileSync(join(root, 'en-curso', '10-card.md'), cardMd({ title: 'Sin ACs', number: 10, slug: '10', labels: 'None', list: 'En curso', checklist: false }));
 
-  writeFileSync(join(epicA, 'epic.md'), issueMd('EPIC: Checkout', 'PROJ-1', 'In Progress'));
-  writeFileSync(join(covered, 'story.md'), issueMd('Pay with card', 'PROJ-2', 'Done'));
-  writeFileSync(join(covered, 'test-cases', 'TEST-PROJ-10-happy-path.md'), testMd({ key: 'PROJ-10', components: 'Checkout' }));
-  writeFileSync(join(covered, 'test-cases', 'TEST-PROJ-11-declined.md'), testMd({ key: 'PROJ-11', status: 'Draft' }));
-  writeFileSync(join(uncovered, 'story.md'), issueMd('Refund', 'PROJ-3', 'Ready For QA'));
-  writeFileSync(join(epicB, 'epic.md'), issueMd('EPIC: Search', 'PROJ-4', 'Planning'));
-  writeFileSync(join(bare, 'story.md'), issueMd('Filter', 'PROJ-5', 'Backlog'));
-  writeFileSync(join(epicC, 'epic.md'), issueMd('EPIC: Empty Shell', 'PROJ-6', 'Planning'));
-  writeFileSync(join(root, 'epics', '_orphans', 'tests', 'TEST-PROJ-40-loose.md'), testMd({ key: 'PROJ-40', status: 'DEPRECATED' }));
-  writeFileSync(join(root, 'bugs', 'BUG-PROJ-50-broken-total', 'bug.md'), issueMd('Broken total', 'PROJ-50', 'Closed'));
-  writeFileSync(join(root, 'bugs', 'BUG-PROJ-50-broken-total', 'test-cases', 'TEST-PROJ-51-regression.md'), testMd({ key: 'PROJ-51', components: 'Checkout' }));
+  // The empty list has no card.md, so its real name is recovered from board.md.
+  writeFileSync(join(root, 'board.md'), [
+    '# Trello Board Mirror',
+    '',
+    '## Lists',
+    '',
+    '- Por hacer (1 cards)',
+    '- En curso (2 cards)',
+    '- Finalizada (0 cards)',
+    '',
+  ].join('\n'));
 
   return root;
 }
 
-describe('loadPbiTree + computeGaps', () => {
+describe('loadTrelloTree + computeGaps', () => {
   const root = buildSyntheticTree();
-  const model = loadPbiTree(root);
+  const model = loadTrelloTree(root);
   if (!model) { throw new Error('synthetic tree failed to load'); }
   const gaps = computeGaps(model);
 
-  test('materializes the Epic -> Story -> Test hierarchy', () => {
-    expect(model.epics.map(e => e.key)).toEqual(['PROJ-1', 'PROJ-4', 'PROJ-6']);
-    const checkout = model.epics[0];
-    expect(checkout.title).toBe('Checkout');
-    expect(checkout.stories).toHaveLength(2);
-    expect(checkout.stories[0].tests.map(t => t.key)).toEqual(['PROJ-10', 'PROJ-11']);
+  test('materializes the List -> Card hierarchy', () => {
+    expect(model.lists.map(l => l.name)).toEqual(['En curso', 'Finalizada', 'Por hacer']);
+    const enCurso = model.lists[0];
+    expect(enCurso.cards.map(c => c.key)).toEqual(['10', 'QA-9']);
   });
 
-  test('collects orphans and bug-covered tests separately', () => {
-    expect(model.orphanTests.map(t => t.key)).toEqual(['PROJ-40']);
-    expect(model.otherCoverables).toEqual([
-      expect.objectContaining({ kind: 'bugs', key: 'PROJ-50', title: 'Broken total' }),
-    ]);
+  test('resolves the list name from the card header, not the slugified dir name', () => {
+    const porHacer = model.lists.find(l => l.name === 'Por hacer');
+    expect(porHacer?.cards.map(c => c.title)).toEqual(['Relevar vistas']);
   });
 
-  test('records the repo-relative path of each test file', () => {
-    expect(model.orphanTests[0].relPath).toBe(join('epics', '_orphans', 'tests', 'TEST-PROJ-40-loose.md'));
+  test('parses checklist items per card', () => {
+    const qa9 = model.lists[0].cards.find(c => c.key === 'QA-9');
+    expect(qa9?.checkItems.map(i => i.id)).toEqual(['item1', 'item2']);
+    expect(qa9?.checkItems.filter(i => i.complete)).toHaveLength(1);
   });
 
-  test('flags the story with no test-cases', () => {
-    expect(gaps.storiesWithoutTests.map(g => g.story.key)).toEqual(['PROJ-3', 'PROJ-5']);
+  test('records the repo-relative POSIX path of each card file', () => {
+    const card = model.lists[0].cards.find(c => c.key === 'QA-9');
+    expect(card?.relPath).toBe('en-curso/9-card.md');
   });
 
-  test('flags the epic whose stories have zero tests, not the covered one', () => {
-    expect(gaps.epicsWithoutTests.map(e => e.key)).toEqual(['PROJ-4']);
+  test('flags the card with no checklist items (no ACs)', () => {
+    expect(gaps.cardsWithoutAc.map(c => c.key)).toEqual(['10']);
   });
 
-  test('flags the epic with no stories at all', () => {
-    expect(gaps.epicsWithoutStories.map(e => e.key)).toEqual(['PROJ-6']);
+  test('flags the card with no label', () => {
+    expect(gaps.cardsWithoutLabels.map(c => c.key)).toEqual(['10']);
   });
 
-  test('counts component-less tests across stories, bugs and orphans', () => {
-    expect(gaps.testsWithoutComponent.map(t => t.key).sort()).toEqual(['PROJ-11', 'PROJ-40']);
+  test('flags the empty list', () => {
+    expect(gaps.listsWithoutCards.map(l => l.name)).toEqual(['Finalizada']);
   });
 
-  test('groupByComponent pins the unassigned bucket first', () => {
-    const groups = groupByComponent([
-      ...model.epics.flatMap(e => e.stories.flatMap(s => s.tests)),
-      ...model.orphanTests,
-    ]);
-    expect([...groups.keys()][0]).toBe('(no component)');
-    expect(groups.get('Checkout')?.map(t => t.key)).toEqual(['PROJ-10']);
+  test('groupByLabel pins the unlabeled bucket first', () => {
+    const groups = groupByLabel(model.lists.flatMap(l => l.cards));
+    expect([...groups.keys()][0]).toBe('(no label)');
+    expect(groups.get('Qa')?.map(c => c.key)).toEqual(['QA-9']);
   });
 
   rmSync(root, { recursive: true, force: true });
 });
 
-describe('loadPbiTree on an empty or absent tree', () => {
+describe('loadTrelloTree on an empty or absent tree', () => {
   test('an absent root yields null, not a throw', () => {
-    expect(loadPbiTree(join(tmpdir(), 'tests-map-does-not-exist'))).toBeNull();
+    expect(loadTrelloTree(join(tmpdir(), 'tests-map-does-not-exist'))).toBeNull();
   });
 
-  test('a hollow tree (dirs but no synced issues) yields null', () => {
+  test('a hollow tree (only templates/) yields null', () => {
     const root = mkdtempSync(join(tmpdir(), 'tests-map-hollow-'));
-    mkdirSync(join(root, 'epics'), { recursive: true });
-    expect(loadPbiTree(root)).toBeNull();
+    mkdirSync(join(root, 'templates'), { recursive: true });
+    expect(loadTrelloTree(root)).toBeNull();
     rmSync(root, { recursive: true, force: true });
   });
 });

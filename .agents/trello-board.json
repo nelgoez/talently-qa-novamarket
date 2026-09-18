@@ -1,0 +1,74 @@
+{
+  "boardId": "6aa491a7e9a666fe9d9c648c",
+  "boardUrl": "https://trello.com/b/aRb2rJ1p/novamarket",
+  "lists": [
+    {
+      "id": "6aa491bc682d6594f9d93053",
+      "name": "Por hacer"
+    },
+    {
+      "id": "6aa491ccc629fa2c63aa45a6",
+      "name": "En curso"
+    },
+    {
+      "id": "6aa491d29f598f5bcee89e4b",
+      "name": "En Prueba"
+    },
+    {
+      "id": "6aa491d789c1f24a301b4c0a",
+      "name": "Finalizada"
+    }
+  ],
+  "labels": [
+    {
+      "id": "6aa965e2e39540f37a39b360",
+      "name": "Ux ui",
+      "color": "orange"
+    },
+    {
+      "id": "6aa9660c93cd2475fa9a6bda",
+      "name": "Front",
+      "color": "yellow_light"
+    },
+    {
+      "id": "6aa966207fbbae4830c90115",
+      "name": "Back",
+      "color": "purple_dark"
+    },
+    {
+      "id": "6aa491a7e9a666fe9d9c64dc",
+      "name": "",
+      "color": "red"
+    },
+    {
+      "id": "6aa491a7e9a666fe9d9c64de",
+      "name": "",
+      "color": "blue"
+    },
+    {
+      "id": "6aa96639536024ec0ce8d94c",
+      "name": "Qa",
+      "color": "blue_dark"
+    },
+    {
+      "id": "6aa491a7e9a666fe9d9c64d9",
+      "name": "",
+      "color": "green"
+    },
+    {
+      "id": "6aa491a7e9a666fe9d9c64db",
+      "name": "",
+      "color": "orange"
+    },
+    {
+      "id": "6aa491a7e9a666fe9d9c64dd",
+      "name": "",
+      "color": "purple"
+    },
+    {
+      "id": "6aa491a7e9a666fe9d9c64da",
+      "name": "",
+      "color": "yellow"
+    }
+  ]
+}
