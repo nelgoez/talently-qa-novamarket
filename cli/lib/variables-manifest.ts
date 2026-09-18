@@ -194,6 +194,26 @@ export const VAR_MANIFEST: VarSpec[] = [
     note: 'Trello user token (sensitive). Read by the `trello` CLI via `trello auth set`.',
   },
 
+  // --- Talently (gated course source — read-only business context) ---
+  {
+    name: 'TALENTLY_USER_EMAIL',
+    destinations: ['local'],
+    secret: false,
+    required: false,
+    critical: false,
+    obtainHint: 'Talently Lab account email (talentlylab.com.ar) for the gated NovaMarket course.',
+    note: 'Login email for the gated Talently course holding the NovaMarket business source. Local only; not a test target.',
+  },
+  {
+    name: 'TALENTLY_USER_PASSWORD',
+    destinations: ['local'],
+    secret: true,
+    required: false,
+    critical: false,
+    obtainHint: 'Talently Lab account password (talentlylab.com.ar).',
+    note: 'Login password for the gated Talently course. Local only, sensitive.',
+  },
+
   // --- Slack (CI-only notifier) ---
   {
     name: 'SLACK_WEBHOOK_URL',
