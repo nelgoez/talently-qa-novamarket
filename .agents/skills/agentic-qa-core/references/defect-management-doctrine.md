@@ -162,9 +162,9 @@ JQL filters, and dashboards.
 - **Components must pre-exist.** Their options are defined in the project's
   *Components* admin module, not from the issue dropdown; Jira rejects unknown
   names. `acli` cannot create or edit them (`acli/SKILL.md` §Hard limits), so
-  populating them is either an admin task or a REST operation — driven by
-  `scripts/sync-jira-components.ts` through the `/jira-components` command,
-  which is plan-based on purpose: the AI proposes the module map, a human
+   populating them is either an admin task or a REST operation — driven by
+   a plan-based component-sync routine through the `/jira-components` command,
+   which is plan-based on purpose: the AI proposes the module map, a human
   approves it, and only the approved plan is written. Renaming (which preserves
   issue assignments) is a separate operation from creating.
   The module map is proposed from **two** inputs, not one: the app's source
@@ -246,10 +246,10 @@ components          ->  PRODUCT module/epic  ("what part of the product it affec
   under `qa.qa_epics:` — never hardcode it in skill content. Resolve by the
   configured name; the resolver finds-or-creates and caches the key.
 
-#### Every QA process epic carries the `{{QA_ARTIFACT_LABEL}}` label (binding)
+#### Every QA process epic carries the `QA-Artifact` label (binding)
 
 Apply it at creation time, on all four. It is what tells tooling that an Epic is a
-QA bucket rather than a product module: `scripts/sync-jira-issues.ts` reads it to
+QA bucket rather than a product module: the issue-sync layer reads it to
 keep these Epics out of `.context/PBI/epics/`, which is the product tree, and index
 them under `qa-artifacts/` instead. Without the label they land beside real product
 Epics as near-empty folders, because a Story query against a process epic returns
@@ -265,7 +265,7 @@ reports when it does, so a run that mentions the fallback is asking for this lab
 [ISSUE_TRACKER_TOOL] Create Issue:
   type: Epic
   summary: {{jira.qa_epics.<slug>.name}}
-  labels: [{{QA_ARTIFACT_LABEL}}]
+  labels: [QA-Artifact]
 ```
 
 Adding it to an Epic that already exists is a one-field edit and is worth doing the
@@ -313,7 +313,7 @@ A report that skips them is incomplete.
 | Source link | `{{jira.link_types.problem_incident}}` etc. | ✅ | originating Story (Part 4) |
 
 Any required field absent from the instance falls back to a structured comment
-per its `fallback:` in `.agents/jira-required.yaml` — never block on a missing
+per its `fallback:` in the tracker's workflow manifest — never block on a missing
 field.
 
 ### Part 5.1 — Severity → Priority (auto-derive, override allowed)
@@ -345,8 +345,8 @@ Load `/acli` first — it owns the syntax, auth, and the REST-PUT pattern below.
 - **acli `workitem edit` cannot set custom fields or `components`** (exit 1). To set
   or change a custom field / component on an EXISTING issue, use REST
   `PUT /rest/api/3/issue/{KEY}` with `{ "fields": { … } }` — pattern + the
-  `--out/--in` link-inversion gotcha live in the /acli skill's
-  `references/acli-integration.md`.
+   `--out/--in` link-inversion gotcha live in the /acli skill's
+   tool-routing notes.
 - **Never-overwrite (Part 2) = read-before-write**: read the issue's current
   `qa_assignee` (from the synced `.md` or a GET) BEFORE setting it; write only when
   empty, or on an explicit, justified handover.

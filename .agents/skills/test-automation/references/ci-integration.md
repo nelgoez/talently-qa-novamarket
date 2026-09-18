@@ -213,9 +213,9 @@ The config reads through `config/variables.ts`, the single source of truth. It d
 | `TEST_ENV` | `config/variables.ts` | Selects the environment entry in the internal URL map AND the credential set. `config.baseUrl` (frontend, feeds `use.baseURL`) and `config.apiUrl` (API host, feeds `ApiBase`) both come from that map — there are NO `BASE_URL` / `API_BASE_URL` env vars. |
 | `LOCAL_USER_EMAIL` / `LOCAL_USER_PASSWORD` | auth setup projects | Local credentials |
 | `STAGING_USER_EMAIL` / `STAGING_USER_PASSWORD` | auth setup projects | Staging credentials |
-| `AUTO_SYNC` | `jiraSync.ts`, the workflows' `Sync Results to TMS` step | Enable the TMS write-back. It runs as a step AFTER the test step, not inside the teardown (see atc-tracing reference) |
-| `TMS_PROVIDER` | `jiraSync.ts` | `xray` / `jira` / `none` |
-| `STP_EXECUTION_KEY` | `jiraSync.ts` | **Xray only.** Target of the write-back: the key of the **STR** Test Execution linked to the sprint STP — never the STP itself (the sync reads the issue type and refuses a Test Plan). Unset → each run mints a new, unparented Execution. |
+| `AUTO_SYNC` | the TMS sync layer, the workflows' `Sync Results to TMS` step | Enable the TMS write-back. It runs as a step AFTER the test step, not inside the teardown (see atc-tracing reference) |
+| `TMS_PROVIDER` | the TMS sync layer | `xray` / `jira` / `none` |
+| `STP_EXECUTION_KEY` | the TMS sync layer | **Xray only.** Target of the write-back: the key of the **STR** Test Execution linked to the sprint STP — never the STP itself (the sync reads the issue type and refuses a Test Plan). Unset → each run mints a new, unparented Execution. |
 
 ### 5.1 Rules
 

@@ -4,8 +4,8 @@
 
 Stage 1 Planning for a single ticket inside a sprint. The ATP is authored in-session; **where it lives depends on TMS modality** (resolved in Session Start §0):
 
-- **Modality jira-native**: ATP = the Story's `{{jira.acceptance_test_plan}}` field (or `fallback:` comment), written via `[ISSUE_TRACKER_TOOL]`, then materialized to the read-only cache `.../stories/STORY-<KEY>-<slug>/acceptance-test-plan.md` by `bun run jira:sync-issues get <STORY_KEY> --include-comments`.
-- **Modality jira-xray**: ATP = the **Test Plan** issue's `description`, written via `[ISSUE_TRACKER_TOOL]`, then materialized to `.../test-plans/ATP-<ATP_KEY>-<slug>.md` by `bun run jira:sync-issues get <ATP_KEY>`. Filename note: the acronym prefix comes from a conforming ladder title; a Plan or Execution whose title does not follow the grammar keeps the legacy `TESTPLAN-` / `TESTEXEC-` / `RETESTEXEC-` prefix.
+- **Modality jira-native**: ATP = the Story's `{{jira.acceptance_test_plan}}` field (or `fallback:` comment), written via `[ISSUE_TRACKER_TOOL]`, then materialized to the read-only cache `.../stories/STORY-<KEY>-<slug>/acceptance-test-plan.md` by the tracker's issue sync.
+- **Modality jira-xray**: ATP = the **Test Plan** issue's `description`, written via `[ISSUE_TRACKER_TOOL]`, then materialized to `.../test-plans/ATP-<ATP_KEY>-<slug>.md` by the tracker's issue sync. Filename note: the acronym prefix comes from a conforming ladder title; a Plan or Execution whose title does not follow the grammar keeps the legacy `TESTPLAN-` / `TESTEXEC-` / `RETESTEXEC-` prefix.
 
 The old local `test-analysis.md` mirror is **retired** — read the synced ATP file for the active modality instead. Jira is source of truth; never hand-write the synced file.
 
@@ -96,11 +96,11 @@ The phases below (0-8) are the concrete implementation of this pipeline for a si
 
 Read every item before planning. Fail fast if any project-wide context file is missing — hand off to `project-discovery`.
 
-> **Prerequisite**: Load `/acli` skill before any `[ISSUE_TRACKER_TOOL]` WRITE. Detailed READS use `bun run jira:sync-issues` — not `/acli`. Skip the load if Session Start §0.1 in `SKILL.md` already loaded it.
+> **Prerequisite**: Load `/acli` skill before any `[ISSUE_TRACKER_TOOL]` WRITE. Detailed READS use the tracker's issue sync — not `/acli`. Skip the load if Session Start §0.1 in `SKILL.md` already loaded it.
 
 | Input | Source |
 |-------|--------|
-| Ticket (title, description, ACs, priority, comments) | `bun run jira:sync-issues get <KEY> --include-comments` then read the synced `story.md` / `acceptance-criteria.md` / `comments.md` (Jira Key from `{STORY_PATH}/context.md`). NEVER `acli workitem view` for custom fields. |
+| Ticket (title, description, ACs, priority, comments) | the tracker's issue sync then read the synced `story.md` / `acceptance-criteria.md` / `comments.md` (Jira Key from `{STORY_PATH}/context.md`). NEVER `acli workitem view` for custom fields. |
 | Team Discussion | Synced `comments.md` — extract decisions, tech notes, edge cases (see `session-entry-points.md`) |
 | Parent epic + feature plan | `.context/PBI/epics/EPIC-<KEY>-<slug>/feature-test-plan.md` if it exists (synced from the epic) |
 | Project-wide context | `.context/business/business-data-map.md`, `.context/business/business-feature-map.md`, `.context/business/business-api-map.md`, `.context/master-test-plan.md` |
@@ -125,7 +125,7 @@ Read every item before planning. Fail fast if any project-wide context file is m
 
 Also:
 - Author the ATP body → write it to the Story's `{{jira.acceptance_test_plan}}` field (or `fallback:` comment) via `[ISSUE_TRACKER_TOOL]`; append the refined AC section to the ticket description; add label `shift-left-reviewed`.
-- Run `bun run jira:sync-issues get <KEY> --include-comments` to materialize `acceptance-test-plan.md`; read it back to confirm. The synced file is a read-only cache — do not hand-edit or commit hand-written ATP content.
+- Run the tracker's issue sync to materialize `acceptance-test-plan.md`; read it back to confirm. The synced file is a read-only cache — do not hand-edit or commit hand-written ATP content.
 
 ---
 
@@ -143,7 +143,7 @@ Before running the veto + risk score, check whether the Story already passed thr
 
 Short-circuit mode action:
 
-- SYNC then READ `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/acceptance-test-plan.md` — run `bun run jira:sync-issues get <STORY_KEY>` first so the file reflects Jira.
+- SYNC then READ `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/acceptance-test-plan.md` — run the tracker's issue sync first so the file reflects Jira.
 
   > **Read the synced ATP, never a local scratch file.** Shift-Left wrote its refinement into the Jira `acceptance_test_plan` field (field-first — pre-sprint the ATP lives ONLY in that field; the Test Plan ITEM is born in THIS stage, find-or-created from the field), so `acceptance-test-plan.md` IS the pre-sprint refinement at this point in the flow. The old instruction pointed at `shift-left-refinement.md`, a local staging file under a gitignored path: it does not exist on a teammate's machine or in a fresh session, so the short-circuit silently degraded to a full re-run and the pre-sprint savings evaporated with no error. Jira is the only copy every session can reach.
 
@@ -458,7 +458,7 @@ This branch is the **degraded fallback** (Test Plan / Test Execution work types 
     {{jira.acceptance_test_plan}}: {full ATP body}
   labels: +shift-left-reviewed
 
-# Fallback only if {{jira.acceptance_test_plan}} is absent in .agents/jira-fields.json:
+# Fallback only if {{jira.acceptance_test_plan}} is absent in the field catalog:
 [ISSUE_TRACKER_TOOL] Add Comment:
   issue: {STORY_KEY}
   body: |
@@ -484,8 +484,8 @@ In Modality jira-native, when `{{jira.acceptance_test_plan}}` is absent the stru
 
 After the ATP content is in Jira, materialize the read-only cache per modality, then read it back to confirm:
 
-- **Modality jira-native**: `bun run jira:sync-issues get <STORY_KEY> --include-comments` → `acceptance-test-plan.md` in the STORY folder.
-- **Modality jira-xray**: `bun run jira:sync-issues get <ATP_KEY>` → `test-plans/ATP-<ATP_KEY>-<slug>.md` (the sync supports the Test Plan issue type).
+- **Modality jira-native**: the tracker's issue sync → `acceptance-test-plan.md` in the STORY folder.
+- **Modality jira-xray**: the tracker's issue sync → `test-plans/ATP-<ATP_KEY>-<slug>.md` (the sync supports the Test Plan issue type).
 
 Jira is source of truth; the synced file is a read-only cache — NEVER hand-write it.
 
@@ -505,7 +505,7 @@ Jira's `create` transition dropped it in (§1):
 
 On an unmapped slug run the fallback protocol in `agentic-qa-core/references/artifact-lifecycle.md`
 §4: list the LIVE transitions, propose the closest synonym in ONE `AskUserQuestion`, fire the live
-id on yes, recommend `bun run jira:sync-workflows`. Never skip silently, never guess an id.
+id on yes, recommend regenerating the workflow catalog. Never skip silently, never guess an id.
 
 ### Traceability check
 
@@ -533,7 +533,7 @@ If risk is HIGH, add an extended-edge-cases callout and recommend a pre-implemen
 
 ## Phase 8 — No commit
 
-Nothing to commit in this stage. The ATP is canonical in Jira; the local `acceptance-test-plan.md` is a gitignored synced cache rebuilt by `bun run jira:sync-issues` (see `AGENTS.md` §9). Never `git add` it — and never `git add -f` it, which would re-commit a generated Jira mirror.
+Nothing to commit in this stage. The ATP is canonical in Jira; the local `acceptance-test-plan.md` is a gitignored synced cache rebuilt by the tracker's issue sync (see `AGENTS.md` §9). Never `git add` it — and never `git add -f` it, which would re-commit a generated Jira mirror.
 
 ---
 
@@ -563,7 +563,7 @@ See SKILL.md veto rules — veto beats risk score for bugs too.
 6. **Epic inheritance beats duplication** — if the feature plan already answered a risk or integration point, cite it, do not re-derive.
 7. **Language** — artifacts + commit messages in English; conversation mirrors the user's language.
 8. **Data feasibility is a blocker** — if a critical AC has no reachable data, stop and surface the blocker before writing outlines.
-9. **Source order** — the canonical ATP is in Jira (jira-native: Story `{{jira.acceptance_test_plan}}` field or `## Acceptance Test Plan (ATP)` fallback comment; jira-xray: the Test Plan issue's `description`). The local synced file is a read-only cache materialized by `bun run jira:sync-issues` (jira-native → `acceptance-test-plan.md`; jira-xray → `test-plans/ATP-<ATP_KEY>-<slug>.md`). Never hand-write or hand-edit the synced file.
+9. **Source order** — the canonical ATP is in Jira (jira-native: Story `{{jira.acceptance_test_plan}}` field or `## Acceptance Test Plan (ATP)` fallback comment; jira-xray: the Test Plan issue's `description`). The local synced file is a read-only cache materialized by the tracker's issue sync (jira-native → `acceptance-test-plan.md`; jira-xray → `test-plans/ATP-<ATP_KEY>-<slug>.md`). Never hand-write or hand-edit the synced file.
 10. **No ROI here** — prioritization for regression backlog is `test-documentation`'s job; this skill only tags Priority per outline.
 
 ---
@@ -579,7 +579,7 @@ See SKILL.md veto rules — veto beats risk score for bugs too.
 - [ ] ATP content written to `{{jira.acceptance_test_plan}}` (or `## Acceptance Test Plan (ATP)` fallback comment)
 - [ ] jira-xray: Set-first order honored — ATP item find-or-created FROM the field · ATS created/updated with ALL the Story's TCs + linked to the Story via the `test` slug (components inherited) · ATP/ATR test lists derived from the ATS membership
 - [ ] jira-xray: ATR created WITH the Test Environment (`active_env`) — no environment, no ATR
-- [ ] Synced ATP cache materialized (not hand-written) — jira-native: `acceptance-test-plan.md` via `bun run jira:sync-issues get <STORY_KEY> --include-comments`; jira-xray: `test-plans/ATP-<ATP_KEY>-<slug>.md` via `bun run jira:sync-issues get <ATP_KEY>`
+- [ ] Synced ATP cache materialized (not hand-written) — jira-native: `acceptance-test-plan.md` via the tracker's issue sync; jira-xray: `test-plans/ATP-<ATP_KEY>-<slug>.md` via the tracker's issue sync
 - [ ] Three-edge traceability check passed (Story↔ATS coverage + ATP↔Story + ATR↔Story administrative + lists match)
 - [ ] Final report delivered to user with open questions + blocker note if needed
 - [ ] Nothing committed — synced ATP cache left untracked (gitignored; Jira is canonical)

@@ -17,11 +17,11 @@ This reference defines:
 | Input | Source |
 |-------|--------|
 | Refined refinement file (NON-Jira working file) | `.context/PBI/epics/EPIC-<EPIC_KEY>-<slug>/stories/STORY-<STORY_KEY>-<slug>/shift-left-refinement.md` |
-| Current Story status | `bun run jira:sync-issues get {STORY_KEY}`, then read synced status (or `acli search` for the trivial status-only lookup) |
+| Current Story status | the tracker's issue sync (`get {STORY_KEY}`), then read synced status (or `acli search` for the trivial status-only lookup) |
 | Current Story labels | Same synced read — labels list |
 | Modality | From the session's `progress.md` (`.session/shift-left-testing/<batch-id>/`, resolved in shift-left-testing Phase 0.1). Informational here — the ATP write is field-first in both modalities |
-| TMS field map | `.agents/jira-fields.json` → `{{jira.acceptance_criteria}}`, `{{jira.acceptance_test_plan}}` |
-| Workflow transitions | `.agents/jira-workflows.json` → `{{jira.transition.story.analyze}}`, `{{jira.transition.story.estimate}}` |
+| TMS field map | the tracker's field catalog → `{{jira.acceptance_criteria}}`, `{{jira.acceptance_test_plan}}` |
+| Workflow transitions | the project's workflow catalog → `{{jira.transition.story.analyze}}`, `{{jira.transition.story.estimate}}` |
 | Tracking subtask | The `[QA] Shift-Left Review` subtask created in Phase 1 (`{{jira.status.subtask.active}}` — the subtask workflow's names are `ACTIVE` / `Close`, NOT "In Progress" / "Done"). Closed at Step 5b via `{{jira.transition.subtask.complete}}`; if the catalog has no subtask work type, Phase 1 skipped it — Step 5b then skips with a warning too |
 | Artifact lifecycle | `agentic-qa-core/references/artifact-lifecycle.md` — §1 (Story + subtask rows), §2 (assignee = self on the subtask at create), §4 (unmapped-status fallback), §5 (light stage verifier) |
 
@@ -42,9 +42,9 @@ The refined Acceptance Criteria are CANONICAL and belong in the dedicated Jira f
     {{jira.acceptance_criteria}}: <Refined ACs — Phase 3 of shift-left-refinement.md verbatim>
 ```
 
-FALLBACK (field absent on this instance): post the refined ACs as a structured comment headed `## Acceptance Criteria`, per `.agents/jira-required.yaml` → `acceptance_criteria.fallback` (`{ target: comment, label: "Acceptance Criteria" }`). Never block.
+FALLBACK (field absent on this instance): post the refined ACs as a structured comment headed `## Acceptance Criteria`, per the tracker's workflow manifest → `acceptance_criteria.fallback` (`{ target: comment, label: "Acceptance Criteria" }`). Never block.
 
-After writing, run `bun run jira:sync-issues get {STORY_KEY} --include-comments` and read back the synced `acceptance-criteria.md` to confirm the field (or fallback comment) landed.
+After writing, run the tracker's issue sync (`get {STORY_KEY} --include-comments`) and read back the synced `acceptance-criteria.md` to confirm the field (or fallback comment) landed.
 
 ### Step 1b — Append supporting analysis to Story description
 
@@ -99,14 +99,14 @@ The write is identical in Modality jira-xray and Modality jira-native:
     {{jira.acceptance_test_plan}}: <full shift-left-refinement.md body>
 ```
 
-FALLBACK (the instance has not provisioned `{{jira.acceptance_test_plan}}`): skip the field write and switch Step 3 to fallback mode — the `## Acceptance Test Plan (ATP)` comment carries the full body inline, per `.agents/jira-required.yaml` → `acceptance_test_plan.fallback` (`{ target: comment, label: "Acceptance Test Plan (ATP)" }`). Warn the user in the per-Story summary. Never block.
+FALLBACK (the instance has not provisioned `{{jira.acceptance_test_plan}}`): skip the field write and switch Step 3 to fallback mode — the `## Acceptance Test Plan (ATP)` comment carries the full body inline, per the tracker's workflow manifest → `acceptance_test_plan.fallback` (`{ target: comment, label: "Acceptance Test Plan (ATP)" }`). Warn the user in the per-Story summary. Never block.
 
 ### Step 3 — Handoff notification + fallback comment
 
 Jira is the source of truth: the ATP lives in the `{{jira.acceptance_test_plan}}` field (Step 2) — do NOT mirror it into a comment when the field exists. Post ONE handoff comment on the Story:
 
 - **Field present (default)**: a SHORT notification — the pre-sprint ATP is ready for review in the `{{jira.acceptance_test_plan}}` field. Do NOT paste the full body.
-- **FALLBACK — only if `{{jira.acceptance_test_plan}}` is absent on this instance** (per `.agents/jira-required.yaml` → `acceptance_test_plan.fallback`, `{ target: comment, label: "Acceptance Test Plan (ATP)" }`): inline the full body under a `## Acceptance Test Plan (ATP)` heading so the content still lands somewhere readable.
+- **FALLBACK — only if `{{jira.acceptance_test_plan}}` is absent on this instance** (per the tracker's workflow manifest → `acceptance_test_plan.fallback`, `{ target: comment, label: "Acceptance Test Plan (ATP)" }`): inline the full body under a `## Acceptance Test Plan (ATP)` heading so the content still lands somewhere readable.
 
 ```
 [ISSUE_TRACKER_TOOL] Add Comment:
@@ -191,16 +191,16 @@ Phase 1 found-or-created this subtask under the Story (assignee = self per `agen
 > **On an unmapped slug** (this project renamed the subtask statuses, or the catalog is
 > stale): run the fallback protocol in `agentic-qa-core/references/artifact-lifecycle.md`
 > §4 — list the LIVE transitions, propose the closest synonym in ONE `AskUserQuestion`,
-> fire the live id on yes, and recommend `bun run jira:sync-workflows`. Never skip silently.
+> fire the live id on yes, and recommend regenerating the workflow catalog. Never skip silently.
 
-3. If Phase 1 skipped subtask creation (no subtask work type in `.agents/jira-workflows.json`, or the project disallows subtasks): skip this step with a warning in the per-Story log. Never block the handoff on subtask support.
+3. If Phase 1 skipped subtask creation (no subtask work type in the project's workflow catalog, or the project disallows subtasks): skip this step with a warning in the per-Story log. Never block the handoff on subtask support.
 
 ### Step 6 — Verify trace
 
 Both modalities (field-first — there is no Test Plan item to trace pre-sprint):
 
 ```
-bun run jira:sync-issues get {STORY_KEY} --include-comments
+# sync the ticket detail from the tracker (get {STORY_KEY} --include-comments)
 # then read the synced field files + comments.md. Verify:
 #   - acceptance_criteria field (or "## Acceptance Criteria" fallback comment) != empty
 #   - field {{jira.acceptance_test_plan}} != empty

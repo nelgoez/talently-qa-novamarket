@@ -277,7 +277,7 @@ STP_EXECUTION_KEY=PROJ-456   # Xray only — the STR Test Execution the run writ
 
 `STP_EXECUTION_KEY` decides WHERE results land. Despite the name it must hold the key of
 the **STR Test Execution** linked to the sprint STP, **never the STP's own key** —
-`tests/utils/jiraSync.ts` reads the target's issue type and refuses a Test Plan outright.
+the (now-removed) Jira sync layer read the target's issue type and refused a Test Plan outright.
 Unset → every run mints a NEW, unparented Execution instead of appending to the STR.
 
 Jira Direct:
@@ -287,7 +287,7 @@ Jira Direct:
 # .agents/project.yaml -> issue_tracker.atlassian_url (`bun run agents:setup`).
 ATLASSIAN_EMAIL=email@company.com
 ATLASSIAN_API_TOKEN=...
-JIRA_TEST_STATUS_FIELD={{jira.test_status}}   # resolved at runtime against .agents/jira-fields.json (regenerate via `bun run jira:sync-fields --force`)
+JIRA_TEST_STATUS_FIELD={{jira.test_status}}   # resolved at runtime against the field catalog (regenerate it to refresh)
 ```
 
 ### 8.4 Comment body sent to the TMS
@@ -422,7 +422,7 @@ The manifest is a static registry — it says what **exists in code**. `atc_resu
 | Sync reports "No ATC results to sync" | `atc_results.json` empty | Run tests first; check KataReporter ran `generateAtcReport()`; confirm reporter config |
 | Sync fails with 401 | Bad TMS credentials | Verify `XRAY_CLIENT_*` or `ATLASSIAN_API_TOKEN`; check expiry and permissions |
 | Sync fails with "Test key not found" | TMS issue missing or mistyped | Create the issue in the TMS first; check case-sensitive exact match |
-| Custom-field error (Jira Direct) | Wrong `JIRA_TEST_STATUS_FIELD` ID | `[ISSUE_TRACKER_TOOL] list_fields()` (load `/acli`) and grep for the field; or re-run `bun run jira:sync-fields --force` |
+| Custom-field error (Jira Direct) | Wrong `JIRA_TEST_STATUS_FIELD` ID | `[ISSUE_TRACKER_TOOL] list_fields()` (load `/acli`) and grep for the field; or regenerate the field catalog |
 | Sync is slow | Jira Direct = one request per ATC | Batch via Xray if budget allows; move sync off the local loop — run only in CI on `main` |
 
 ---
@@ -434,7 +434,7 @@ The manifest is a static registry — it says what **exists in code**. `atc_resu
 | `tests/utils/decorators.ts` | `@atc`, `@step`, `formatArgs`, `storeResult` (NDJSON writer), `SENSITIVE_KEYS` |
 | `tests/KataReporter.ts` | Terminal tree output; `generateAtcReport()` in `onEnd()` (NDJSON → JSON); NDJSON cleanup |
 | `tests/teardown/global.teardown.ts` | Reads `.atc_partial.ndjson`, prints the ATC Coverage summary, states whether the write-back is on. Does NOT sync |
-| `tests/utils/jiraSync.ts` | `syncToXray()`, `syncToJiraDirect()`, provider router |
+| the (now-removed) Jira sync layer | `syncToXray()`, `syncToJiraDirect()`, provider router |
 | `playwright.config.ts` | Reporter chain (KataReporter must be registered), `global-teardown` PROJECT (wired via `teardown:` on the `global-setup` project, not a `globalTeardown` hook) |
 | `config/variables.ts` | `config.tms.*` — reads the env vars listed in §8.3 |
 | `scripts/kata-manifest.ts` | Static scanner — produces `kata-manifest.json` |

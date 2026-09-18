@@ -121,7 +121,7 @@ This skill is compliant with the doctrine in `AGENTS.md` §"Orchestration Mode (
 
 | Capability | Need | Why here |
 |---|---|---|
-| Issue-tracker (`[ISSUE_TRACKER_TOOL]`) | REQUIRED | TC / ATP / ATR creation, linking, transitions. Load `/acli`; validate via `bun run jira:check`. |
+| Issue-tracker (`[ISSUE_TRACKER_TOOL]`) | REQUIRED | TC / ATP / ATR creation, linking, transitions. Load `/acli`; validate the tracker setup. |
 | TMS modality + `[TMS_TOOL]` | REQUIRED | The whole Phase 0 gate. jira-xray → `/xray-cli` loaded + `XRAY_*` creds set + Xray issue types present. jira-native → `/acli` covers it. Resolve before Phase 1; ask only if all auto-checks fail. |
 | Source repos readable | OPTIONAL | Phase 1 source-code validation reads backend/frontend code, not a running env — no live-env or DB/API/browser probe needed. |
 
@@ -246,8 +246,8 @@ After scope confirmation, **write `.session/test-documentation/<scope>/plan.md`*
 | User Story / Epic | Description, ACs, comments, linked issues | Scenario identification, risk signals |
 | Closed bugs linked to the story | Summary, root cause, fix area | Prior-bug prioritization rule |
 | Exploratory session notes | Validated scenarios, observations | Reuse nomenclature already used |
-| Existing ATP (if present) — **modality-aware** (see §Phase 0) | **jira-native**: Story field `{{jira.acceptance_test_plan}}` → synced `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/acceptance-test-plan.md` (read-only Jira cache — sync via `bun run jira:sync-issues get <STORY> --include-comments`). **jira-xray**: Test Plan issue `description` → `bun run jira:sync-issues get <ATP_KEY>` → `test-plans/ATP-<KEY>-<slug>.md` (acronym prefix = conforming ladder title; a non-conforming title keeps the legacy `TESTPLAN-` / `TESTEXEC-` / `RETESTEXEC-` prefix); per-TC run state via `[TMS_TOOL]` (xray-cli) | Scenarios may already exist — do not reinvent |
-| Existing ATR (if present) — **modality-aware** (see §Phase 0) | **jira-native**: Story field `{{jira.acceptance_test_results}}` → synced `acceptance-test-results.md` (same `jira:sync-issues get <STORY> --include-comments`). **jira-xray**: Test Execution issue `description` → `bun run jira:sync-issues get <ATR_KEY>` → `test-executions/ATR-<KEY>-<slug>.md` (sync supports these types); per-TC run results via `[TMS_TOOL]` (xray-cli) | Prior run results — do not re-execute what is already recorded |
+| Existing ATP (if present) — **modality-aware** (see §Phase 0) | **jira-native**: Story field `{{jira.acceptance_test_plan}}` → synced `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/acceptance-test-plan.md` (read-only Jira cache — sync via the tracker's issue sync). **jira-xray**: Test Plan issue `description` → the tracker's issue sync → `test-plans/ATP-<KEY>-<slug>.md` (acronym prefix = conforming ladder title; a non-conforming title keeps the legacy `TESTPLAN-` / `TESTEXEC-` / `RETESTEXEC-` prefix); per-TC run state via `[TMS_TOOL]` (xray-cli) | Scenarios may already exist — do not reinvent |
+| Existing ATR (if present) — **modality-aware** (see §Phase 0) | **jira-native**: Story field `{{jira.acceptance_test_results}}` → synced `acceptance-test-results.md` (same tracker sync). **jira-xray**: Test Execution issue `description` → the tracker's issue sync → `test-executions/ATR-<KEY>-<slug>.md` (sync supports these types); per-TC run results via `[TMS_TOOL]` (xray-cli) | Prior run results — do not re-execute what is already recorded |
 | Implementation plan / source code | Actual files, APIs, test IDs | Validate design matches implementation before documenting |
 | `.context/business/domain-glossary.md` (if present) | Canonical entity + process names, anti-glossary banned terms | Vocabulary reference for TC names, steps, and preconditions — terms must match the glossary |
 
@@ -544,7 +544,7 @@ Rules that always apply:
 
 ### Workflow transitions
 
-> **Substrate reference**: state and transition names below resolve from `.agents/jira-workflows.json` (manifest at `.agents/jira-required.yaml` `work_types.test_case`). Use `{{jira.status.test_case.<slug>}}` and `{{jira.transition.test_case.<slug>}}` in skill code; the substrate maps the slug to the literal Jira name. See `references/tms-conventions.md` §5 for the full state machine.
+> **Substrate reference**: state and transition names below resolve from the project's workflow catalog (manifest at the tracker's workflow manifest `work_types.test_case`). Use `{{jira.status.test_case.<slug>}}` and `{{jira.transition.test_case.<slug>}}` in skill code; the substrate maps the slug to the literal Jira name. See `references/tms-conventions.md` §5 for the full state machine.
 
 ```
 Draft --start_design--> In Design --ready_to_run--> Ready --+-- for_manual                  --> Manual    (terminal manual)
@@ -565,7 +565,7 @@ Never jump states. If a TC needs rework, use a `back_from_<state>` transition (e
 
 The Manual branch is a catalog fact, not a style choice: **there is no `in_review` → `manual` edge**. A TC already sitting at `candidate` demotes via `{{jira.transition.test_case.manual_execution_from_candidate}}` instead. Canon: `agentic-qa-core/references/artifact-lifecycle.md` §1.1.
 
-**On an unmapped slug** (the project renamed its Test statuses, or the catalog is stale): run the fallback protocol in `agentic-qa-core/references/artifact-lifecycle.md` §4 — list the LIVE transitions, propose the closest synonym in ONE `AskUserQuestion`, fire the live id on yes, and recommend `bun run jira:sync-workflows`. Never leave a TC at `draft` because a slug did not resolve.
+**On an unmapped slug** (the project renamed its Test statuses, or the catalog is stale): run the fallback protocol in `agentic-qa-core/references/artifact-lifecycle.md` §4 — list the LIVE transitions, propose the closest synonym in ONE `AskUserQuestion`, fire the live id on yes, and recommend regenerating the workflow catalog. Never leave a TC at `draft` because a slug did not resolve.
 
 ### Naming — the one rule that matters
 
@@ -606,7 +606,7 @@ Full reference in `references/tms-conventions.md` §Labels.
 
 ### Local cache (synced — never hand-authored)
 
-After TMS creation, materialize the per-TC cache by running `bun run jira:sync-issues get <STORY_KEY>` — the sync writes one markdown file per linked `Test` issue into `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/test-cases/TEST-<KEY>-<slug>.md`. This directory is `[SYNC]` (Jira mirror, gitignored — see `AGENTS.md` §9): this skill CREATES the `Test` issues in the TMS, links them to the Story, runs the sync, and READS the materialized files — it never authors files in `test-cases/`. File format in `references/jira-test-management.md` §Local cache. This prevents re-reading the TMS in future sessions and gives `test-automation` an immediate handoff.
+After TMS creation, materialize the per-TC cache by running the tracker's issue sync — the sync writes one markdown file per linked `Test` issue into `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/test-cases/TEST-<KEY>-<slug>.md`. This directory is `[SYNC]` (Jira mirror, gitignored — see `AGENTS.md` §9): this skill CREATES the `Test` issues in the TMS, links them to the Story, runs the sync, and READS the materialized files — it never authors files in `test-cases/`. File format in `references/jira-test-management.md` §Local cache. This prevents re-reading the TMS in future sessions and gives `test-automation` an immediate handoff.
 
 ### Reports — fixed filenames
 
@@ -621,7 +621,7 @@ Phase 3 writes exactly two files to `.context/reports/`, both named from the ses
 
 **Both files are `[LOCAL]`, not deliverables.** `.context/reports/` is gitignored and every file in it exists only on the machine that generated it (`.context/reports/README.md`). Nothing downstream may depend on either file being present.
 
-**So the Deferred verdicts must ALSO be recorded durably.** Candidate and Manual verdicts already survive as TMS `Test` issues carrying their ROI comment — but Deferred scenarios create no TMS item by design, so without a second home the reasoning dies with the directory. After `PRIORITIZATION-<scope>.md` is written, mirror its Deferred list as a Jira comment on the scope's Story / Epic (same fallback-comment pattern as `.agents/jira-required.yaml` `fallback:`):
+**So the Deferred verdicts must ALSO be recorded durably.** Candidate and Manual verdicts already survive as TMS `Test` issues carrying their ROI comment — but Deferred scenarios create no TMS item by design, so without a second home the reasoning dies with the directory. After `PRIORITIZATION-<scope>.md` is written, mirror its Deferred list as a Jira comment on the scope's Story / Epic (same fallback-comment pattern as the tracker's workflow manifest `fallback:`):
 
 ```
 [ISSUE_TRACKER_TOOL] Add comment:
@@ -692,7 +692,7 @@ On Phase 3 partial failure (some chunks 429-rate-limited, some succeeded), archi
 - **Fixing broken traceability (TC not linked to US/ATP/ATR, name wrong)** -> use the procedure in the Linking Order section above, backed by `references/tms-architecture.md` §Traceability Rules.
 - **Deciding if a bug deserves a regression TC** -> run the **Bug-driven decision** (§"When to use each scope"): Phase 0 Q2 (prior bug = prioritize) + ROI → if regression-worthy, **reuse the existing failed Test or create a new one** (golden rule); if not, treat as a failed test → Deferred, no new Test.
 - **TMS operations** -> load `/xray-cli` skill for concrete CLI syntax. Issue-tracker operations resolve via `[ISSUE_TRACKER_TOOL]` per AGENTS.md Tool Resolution.
-  - **Reads vs writes split** (per `agentic-qa-core/references/acli-integration.md` §"Reads vs writes"): detailed READS (custom fields, ACs, ATP/ATR, description, comments, linked bugs) -> `bun run jira:sync-issues get <KEY> --include-comments` (or `jql "<query>"`), then read the synced `.md` — NEVER `acli workitem view` for custom fields. TMS WRITES (create Test / Test Plan / Test Execution / link / transition / comment / import) + traceability/List-Tests link-graph reads -> `[TMS_TOOL]` (acli/xray). Trivial metadata + list/search lookups (issue types, key lists) -> acli `view`/`search`.
+  - **Reads vs writes split** (per the tracker's tool-routing notes): detailed READS (custom fields, ACs, ATP/ATR, description, comments, linked bugs) -> the tracker's issue sync, then read the synced `.md` — NEVER `acli workitem view` for custom fields. TMS WRITES (create Test / Test Plan / Test Execution / link / transition / comment / import) + traceability/List-Tests link-graph reads -> `[TMS_TOOL]` (acli/xray). Trivial metadata + list/search lookups (issue types, key lists) -> acli `view`/`search`.
 - **Session contract (Phase -1 resume, plan.md/progress.md schemas, per-chunk checkpoint for Parallel TC creation, archive policy, Engram per-phase checkpoint)** -> read `../agentic-qa-core/references/session-management.md`. This skill is a producer of `session/test-documentation/<scope>/...` topic keys.
 
 ---
@@ -704,12 +704,12 @@ Canonical reading order for any AI starting cold on a test-documentation workflo
 > **TMS modality** (A: Xray vs B: Jira-native) is resolved live by Phase 0 from `.agents/project.yaml` `testing.tms_cli` and sticky in `plan.md`. **Regression Epic** is resolved live by Phase 3 §Preflight via JQL by the configured name (`type = Epic AND summary ~ "QA Test Repository"` — the value of `qa.qa_epics.test_repository_epic.name`; identity label `QA-Artifact`). **Label taxonomy** defaults are hardcoded in `references/tms-conventions.md`. No external TMS config file is read.
 
 1. `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/` — ticket-local context (module = Epic, 1:1). The detailed read materializes the **FULL synced Story folder**; read **ALL of it** — every per-field `.md` (`story.md`, `acceptance-criteria.md`, scope, business rules, etc.) **plus `comments.md`** — not just one field, so ACs / scope / business rules / comment context are never omitted. Existing ATP and ATR are **modality-aware reads** (see §Phase 0): **jira-native** → Story-folder `acceptance-test-plan.md` / `acceptance-test-results.md` (synced from Story fields `{{jira.acceptance_test_plan}}` / `{{jira.acceptance_test_results}}`); **jira-xray** → `test-plans/ATP-<KEY>-<slug>.md` (Test Plan `description`) / `test-executions/ATR-<KEY>-<slug>.md` (Test Execution `description`, sync supports these types), with per-TC run results via `[TMS_TOOL]` (xray-cli).
-2. `.agents/jira-required.yaml` — canonical slug catalog for fields, statuses, link types.
-3. `.agents/jira-fields.json` — slug → numeric custom-field-ID mapping for ADF / API calls.
-4. `.agents/jira-workflows.json` — `test_case` workflow + transition catalog (Draft → In Design → Ready → …).
+2. the tracker's workflow manifest — canonical slug catalog for fields, statuses, link types.
+3. the field catalog — slug → numeric custom-field-ID mapping for ADF / API calls.
+4. the project's workflow catalog — `test_case` workflow + transition catalog (Draft → In Design → Ready → …).
 4b. `agentic-qa-core/references/artifact-lifecycle.md` — **canonical authority** for artifact statuses: the verdict→status mapping for TCs, the RTP that stays `ready`, assignee-at-create on every artifact this skill makes, the unmapped-status fallback (§4), and the light stage verifier that closes the stage (§5). Read BEFORE firing any transition.
 5. `.context/master-test-plan.md` — regression Epic, prioritization rubric, what to test and why.
-6. The Story's AC + spec via `bun run jira:sync-issues get <STORY> --include-comments`, then read **every** synced `.md` in the materialized folder — current Description, AC, scope, business rules, `comments.md`, linked bugs — not just one field. NEVER use `[ISSUE_TRACKER_TOOL]` `view` (returns null for custom fields). **TC note**: a TC body = the `Test` issue `description` (synced both modalities via `bun run jira:sync-issues get <TEST-KEY>`); the Xray Gherkin / Test-Steps plugin field is NOT synced — it mirrors the description, so read the synced TC `.md` for Gherkin/steps.
+6. The Story's AC + spec via the tracker's issue sync, then read **every** synced `.md` in the materialized folder — current Description, AC, scope, business rules, `comments.md`, linked bugs — not just one field. NEVER use `[ISSUE_TRACKER_TOOL]` `view` (returns null for custom fields). **TC note**: a TC body = the `Test` issue `description` (synced both modalities via the tracker's issue sync); the Xray Gherkin / Test-Steps plugin field is NOT synced — it mirrors the description, so read the synced TC `.md` for Gherkin/steps.
 
 ---
 
@@ -720,7 +720,7 @@ Canonical reading order for any AI starting cold on a test-documentation workflo
 - **D3.** NEVER over-detail Test Case steps. The spec / KATA ATC is the source of truth; the TC step list is a pointer, not a duplicate.
 - **D4.** NEVER skip ROI scoring. Every TC ends with a Candidate / Manual / Deferred verdict before handoff to `/test-automation`.
 - **D5.** NEVER mix Modality jira-xray and Modality jira-native inside the same Story's ATP. Modality is one-shot per project and Phase 0 resolves it.
-- **D6.** NEVER fabricate Jira field IDs. Run `bun run jira:sync-fields --force` and resolve via `{{jira.<slug>}}` — hardcoded `customfield_NNNNN` drifts silently.
+- **D6.** NEVER fabricate Jira field IDs. Regenerate the field catalog and resolve via `{{jira.<slug>}}` — hardcoded `customfield_NNNNN` drifts silently.
 - **D7.** NEVER link an ATR to multiple ATPs. The relationship is 1:1 (one plan, one results record); multiple ATRs per ATP is fine, the inverse is not.
 - **D8.** NEVER reopen a Closed bug to attach a regression TC. File a new TC and link to the bug via `tests / is tested by` — bug history stays immutable.
 
@@ -875,7 +875,7 @@ Resolve `[TMS_TOOL]` / `[ISSUE_TRACKER_TOOL]` via `AGENTS.md` §Tool Resolution.
     {{jira.acceptance_test_plan}}: {Test Analysis body}
   labels: +shift-left-reviewed
 
-# FALLBACK only if {{jira.acceptance_test_plan}} is absent in .agents/jira-fields.json:
+# FALLBACK only if {{jira.acceptance_test_plan}} is absent in the field catalog:
 [ISSUE_TRACKER_TOOL] Add Comment:
   issue: {STORY_KEY}
   body: |
@@ -888,7 +888,7 @@ Resolve `[TMS_TOOL]` / `[ISSUE_TRACKER_TOOL]` via `AGENTS.md` §Tool Resolution.
   fields:
     {{jira.acceptance_test_results}}: {Test Report body}
 
-# FALLBACK only if {{jira.acceptance_test_results}} is absent in .agents/jira-fields.json:
+# FALLBACK only if {{jira.acceptance_test_results}} is absent in the field catalog:
 [ISSUE_TRACKER_TOOL] Add Comment:
   issue: {STORY_KEY}
   body: |

@@ -200,7 +200,7 @@ Rules:
 | `test` / `test:e2e` / `test:integration` | Full run / `e2e` project / `integration` project |
 | `test:smoke` | `smoke` project (`@critical` grep across e2e + integration) |
 | `test:env:check` | Validates env configuration before any suite runs |
-| `test:sync` | TMS results sync (`tests/utils/jiraSync.ts`) |
+| `test:sync` | TMS results sync |
 | `lint:check` / `types:check` | Static gates in `build.yml` |
 | `pw:install` | `playwright install --with-deps chromium` |
 

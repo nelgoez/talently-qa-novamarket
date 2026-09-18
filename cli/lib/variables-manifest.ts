@@ -269,6 +269,26 @@ export const VAR_MANIFEST: VarSpec[] = [
     note: 'Atlassian API token. CRITICAL — Day-0 collected; sensitive.',
   },
 
+  // --- Trello (issue tracker) ---
+  {
+    name: 'TRELLO_API_KEY',
+    destinations: ['local'],
+    secret: false,
+    required: false,
+    critical: false,
+    obtainHint: 'trello.com/power-ups/admin → create a Power-Up → generate an API key.',
+    note: 'Trello API key (public — identifies the Power-Up). Read by the `trello` CLI.',
+  },
+  {
+    name: 'TRELLO_TOKEN',
+    destinations: ['local'],
+    secret: true,
+    required: false,
+    critical: false,
+    obtainHint: 'trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&key=<API_KEY>',
+    note: 'Trello user token (sensitive). Read by the `trello` CLI via `trello auth set`.',
+  },
+
   // --- Slack (CI-only notifier) ---
   {
     name: 'SLACK_WEBHOOK_URL',

@@ -56,7 +56,7 @@ and mirrors them onto the **STP** issue (`STP: Sprint#{N}: {objective}`, a Test 
 | `qa_lead` | NO | Defaults to `git config user.name`, ask if missing | `Jane Doe` |
 | `previous_sprint` | NO | Prior sprint number, for carryover detection | `9` |
 
-> **Prerequisite**: The sprint roster query in Step 1 is a bulk read — use `bun run jira:sync-issues jql "<query>"` (resolves every slug, materializes per-issue `.md`). Load `/acli` only for the later WRITEs (the STP, transitions). Part 1 runs before per-issue Session Start, so §0.1 has not yet executed — load `/acli` explicitly when a write is reached.
+> **Prerequisite**: The sprint roster query in Step 1 is a bulk read — use the tracker's issue sync (resolves every slug, materializes per-issue `.md`). Load `/acli` only for the later WRITEs (the STP, transitions). Part 1 runs before per-issue Session Start, so §0.1 has not yet executed — load `/acli` explicitly when a write is reached.
 
 ### Steps
 
@@ -64,15 +64,15 @@ and mirrors them onto the **STP** issue (`STP: Sprint#{N}: {objective}`, a Test 
 
    | Step | Source | Rule |
    |---|---|---|
-   | a. Declared | `.agents/jira-required.yaml` | every work type with `coverable: true` |
+   | a. Declared | the tracker's workflow manifest | every work type with `coverable: true` |
    | b. Named | that work type's `jira_issue_type` | `A \| B \| C` = ORDERED alternatives; the first name the instance actually has wins (the `subtask` entry documents this pattern) |
-   | c. Present | `.agents/jira-workflows.json` | the synced catalog of what the instance really exposes — a work type absent here does not exist |
+   | c. Present | the project's workflow catalog | the synced catalog of what the instance really exposes — a work type absent here does not exist |
    | d. Missing | — | **SKIP WITH A NOTE** in `plan.md` §"Risks & open questions". Never a blocker, never a stop |
 
    Build the JQL from the surviving names plus the sprint filter. *Illustrative only, do NOT copy this list anywhere:* an instance exposing all six coverable types yields `sprint = {N} AND project = {{PROJECT_KEY}} AND issuetype in (Story, Bug, Defect, Improvement, "Tech Story", "Tech Debt")`; an instance with only `Story` yields `issuetype = Story`, which is a correct and complete run.
 
-2. **Query the roster** via `bun run jira:sync-issues jql "<the query from Step 1>"`: Issue key, Type, Title, Priority, Status, QA Assignee, Developer, Project/Epic, Platform read from the synced `.md`. (A trivial `[ISSUE_TRACKER_TOOL]` search is fine only if you need nothing beyond key/summary/status — any custom field requires the sync.) Sort by Priority DESC, Status ASC.
-3. **Classify** each issue's board status (resolve canonical slugs via `.agents/jira-workflows.json`):
+2. **Query the roster** via the tracker's issue sync (jql): Issue key, Type, Title, Priority, Status, QA Assignee, Developer, Project/Epic, Platform read from the synced `.md`. (A trivial `[ISSUE_TRACKER_TOOL]` search is fine only if you need nothing beyond key/summary/status — any custom field requires the sync.) Sort by Priority DESC, Status ASC.
+3. **Classify** each issue's board status (resolve canonical slugs via the project's workflow catalog):
 
    | Canonical Status (Story) | QA Category | Wave |
    |---|---|---|
@@ -88,7 +88,7 @@ and mirrors them onto the **STP** issue (`STP: Sprint#{N}: {objective}`, a Test 
 
    Principle: issues already mid-test or queued for QA go to Wave 1; previously-approved issues missing ATP/ATR get retroactive Wave-1-priority treatment. The slugs above are shown for the `story` work type; resolve the equivalent slug per work type for the other coverable types (`{{jira.status.<work_type>.<slug>}}`). If the project's substrate lacks a slug (e.g. no `blocked` status), drop that row gracefully and continue.
 
-4. **Detect carryovers** if `previous_sprint` was given. Read the prior sprint's archived log (`.session/.archive/<date>-sprint-testing-sprint-<N-1>/progress.md`) and, when it is gone or was never on this machine, the prior STP's comments via `bun run jira:sync-issues get <STP-KEY> --include-comments`. **The STP is the authoritative source** — the archive is local and may not exist. For each issue whose last recorded status is NOT `PASSED` / `CANCELLED` / `Done`: if it appears in the current sprint, mark it a carryover with prior context; if not, note it "dropped from sprint" and inform the user.
+4. **Detect carryovers** if `previous_sprint` was given. Read the prior sprint's archived log (`.session/.archive/<date>-sprint-testing-sprint-<N-1>/progress.md`) and, when it is gone or was never on this machine, the prior STP's comments via the tracker's issue sync. **The STP is the authoritative source** — the archive is local and may not exist. For each issue whose last recorded status is NOT `PASSED` / `CANCELLED` / `Done`: if it appears in the current sprint, mark it a carryover with prior context; if not, note it "dropped from sprint" and inform the user.
 5. **Organize waves** (substrate-driven; skip slugs the project does not expose):
    - Wave 1 = `{{jira.status.story.in_test}}` + `{{jira.status.story.ready_for_qa}}` + retroactive `{{jira.status.story.qa_approved}}` (no ATP/ATR). Sort: Priority then QA assignment.
    - Wave 2 = `{{jira.status.story.in_review}}` (Dev Complete — PR open). Sort by Priority.
@@ -210,7 +210,7 @@ So: one comment per issue close, carrying the same content as that issue's `prog
 
 **When the comment log and a Story's ATR disagree, the ATR wins.** The ATR is the artifact of record for that issue; the STP comment is a running log that can lag, or be written from stale state.
 
-Read the log back with `bun run jira:sync-issues get <STP-KEY> --include-comments` — it already materializes the comments locally, so this needs no new tooling.
+Read the log back with the tracker's issue sync — it already materializes the comments locally, so this needs no new tooling.
 
 ### Nothing local is a deliverable
 
@@ -309,14 +309,14 @@ Every dispatch uses the **7-component briefing format** defined in `.agents/skil
 >
 > | Variable | Resolves to | Holds |
 > |---|---|---|
-> | `<PBI_FOLDER>` | `.context/PBI/epics/EPIC-<EPIC_KEY>-<EPIC_SLUG>/stories/STORY-<TICKET_KEY>-<STORY_SLUG>/` (module = Epic, 1:1) | The Jira cache for this ticket, plus local-only `context.md` and `evidence/`. Regenerable with `bun run jira:sync-issues`. |
+> | `<PBI_FOLDER>` | `.context/PBI/epics/EPIC-<EPIC_KEY>-<EPIC_SLUG>/stories/STORY-<TICKET_KEY>-<STORY_SLUG>/` (module = Epic, 1:1) | The Jira cache for this ticket, plus local-only `context.md` and `evidence/`. Regenerable with the tracker's issue sync. |
 > | `<SESSION_DIR>` | `.session/sprint-testing/<scope>/` where `<scope>` is `<TICKET_KEY>` (single-issue) or `sprint-<N>/<TICKET_KEY>` (sprint-wide) | Session state: `plan.md`, `progress.md`, and `test-session-memory.md`. In sprint-wide mode the PARENT directory `.session/sprint-testing/sprint-<N>/` holds the sprint's own `plan.md` + `progress.md` — orchestrator-owned, never written by a sub-agent. |
 >
 > Both are absolute paths. They are separate on purpose: `<PBI_FOLDER>` is a cache that a re-sync overwrites wholesale, so anything a resume depends on must live in `<SESSION_DIR>` instead.
 
 > **Environment override**: every briefing resolves `{{WEB_URL}}` / `{{API_URL}}` through `test-session-memory.md` §Environment FIRST. If `WEB_URL_OVERRIDE` / `API_URL_OVERRIDE` is set there (not `none`), use it instead of the `project.yaml` active-env value — this is a session-only ad-hoc URL (broken staging, ephemeral preview deploy, hotfix branch) authorized by the user. It is NEVER written to `.agents/project.yaml`. This is distinct from `active_env` switching (which picks a *named* env from `project.yaml`). The override is recorded once at Session Start and read automatically by all four dispatches — do not re-thread it per briefing.
 
-> **Skill-loading invariant**: every briefing that WRITES via `[ISSUE_TRACKER_TOOL]` requires `/acli`; every briefing that touches `[TMS_TOOL]` in Modality jira-xray also requires `/xray-cli`. Detailed READS (ticket detail, ACs, ATP/ATR, comments) do NOT use `/acli` — they use `bun run jira:sync-issues get <KEY> --include-comments` and read the synced `.md`. Sub-agents inherit the orchestrator's skill registry, so the orchestrator only needs to load `/acli` once at Session Start §0.1 — but each briefing's "Skills to load" line lists it explicitly so the dispatch is self-contained.
+> **Skill-loading invariant**: every briefing that WRITES via `[ISSUE_TRACKER_TOOL]` requires `/acli`; every briefing that touches `[TMS_TOOL]` in Modality jira-xray also requires `/xray-cli`. Detailed READS (ticket detail, ACs, ATP/ATR, comments) do NOT use `/acli` — they use the tracker's issue sync and read the synced `.md`. Sub-agents inherit the orchestrator's skill registry, so the orchestrator only needs to load `/acli` once at Session Start §0.1 — but each briefing's "Skills to load" line lists it explicitly so the dispatch is self-contained.
 
 > **Bug-vs-Feature divergence**: the Stage 1 briefing applies the veto + risk-score decision tree only when `<TICKET_TYPE>` is `Bug`; for Feature/Story tickets it produces the full ATP per `acceptance-test-planning.md` Phases 1-7. The Stage 2 and Stage 3 briefings keep the same shape; their internal step list adapts (smoke + reproduce + regression vs smoke + triforce; Template C/D vs PASSED/FAILED comment).
 
@@ -334,10 +334,10 @@ Context docs:
   - <<REPO_ROOT>>/.agents/skills/sprint-testing/references/session-entry-points.md
   - <<REPO_ROOT>>/.agents/project.yaml (project metadata + active env)
 
-Skills to load: none required for the read (detailed fetch uses bun run jira:sync-issues, not /acli)
+Skills to load: none required for the read (detailed fetch uses the tracker's issue sync, not /acli)
 
 Exact instructions:
-  1. Fetch detail: `bun run jira:sync-issues get <TICKET_KEY> --include-comments`, then read the synced `.md` files (story.md, acceptance-criteria.md, comments.md, etc.) to capture: type, summary, AC list, status, components, fix-version, comments. NEVER `acli workitem view` for custom fields.
+  1. Fetch detail: the tracker's issue sync, then read the synced `.md` files (story.md, acceptance-criteria.md, comments.md, etc.) to capture: type, summary, AC list, status, components, fix-version, comments. NEVER `acli workitem view` for custom fields.
   2. Determine <EPIC_KEY> / <EPIC_SLUG> (module = Epic, 1:1) from the parent epic + components/labels per session-entry-points.md §"Step 4 — Module context".
   3. Generate <STORY_SLUG> (max 5 words, kebab-case) from the ticket summary.
   4. Create <PBI_FOLDER> with the HAND-AUTHORED (NON-Jira) files only:
@@ -390,7 +390,7 @@ Context docs:
   - <<REPO_ROOT>>/.context/business/business-api-map.md (if API-affecting)
   - <<REPO_ROOT>>/.context/PBI/epics/EPIC-<EPIC_KEY>-<EPIC_SLUG>/module-context.md (if it exists)
 
-Skills to load: /acli (for ATP/ATR WRITE + Story link); in Modality jira-xray also /xray-cli (for [TMS_TOOL] Test Plan / Test Execution issues). Detailed reads (ACs, parent feature plan) use bun run jira:sync-issues, not /acli.
+Skills to load: /acli (for ATP/ATR WRITE + Story link); in Modality jira-xray also /xray-cli (for [TMS_TOOL] Test Plan / Test Execution issues). Detailed reads (ACs, parent feature plan) use the tracker's issue sync, not /acli.
 
 Exact instructions:
   1. Bug branch: run the veto decision tree per acceptance-test-planning.md §"Phase 0 — Triage" (SKIP -> emit veto_outcome=skip, write minimal Bug Analysis, exit; REQUIRE -> continue).
@@ -411,10 +411,10 @@ Exact instructions:
        - ATP: `{{jira.transition.test_plan.designed}}` -> `{{jira.status.test_plan.ready}}`.
        - STP (sprint altitude, once the sprint scope is set): `{{jira.transition.test_plan.designed}}` -> `{{jira.status.test_plan.ready}}`.
        - ATS stays `{{jira.status.test_set.designing}}` (membership is final only at Stage 3); ATR stays `{{jira.status.test_execution.active}}` (the run has not happened yet). Both are deliberate — state them, do not "fix" them.
-       On an unmapped slug run the fallback in `agentic-qa-core/references/artifact-lifecycle.md` §4 (list LIVE transitions -> ONE AskUserQuestion -> fire the live id -> recommend `bun run jira:sync-workflows`). NEVER skip silently.
+        On an unmapped slug run the fallback in `agentic-qa-core/references/artifact-lifecycle.md` §4 (list LIVE transitions -> ONE AskUserQuestion -> fire the live id -> recommend regenerating the workflow catalog). NEVER skip silently.
   6. Materialize the local cache per modality (read-only cache; never hand-write it), then read it back to confirm:
-       - Modality jira-native: `bun run jira:sync-issues get <TICKET_KEY> --include-comments` -> <PBI_FOLDER>/acceptance-test-plan.md
-       - Modality jira-xray: `bun run jira:sync-issues get <ATP_KEY>` -> .context/PBI/test-plans/ATP-<ATP_KEY>-<slug>.md (the Test Plan issue; its description holds the ATP body)
+        - Modality jira-native: the tracker's issue sync -> <PBI_FOLDER>/acceptance-test-plan.md
+        - Modality jira-xray: the tracker's issue sync -> .context/PBI/test-plans/ATP-<ATP_KEY>-<slug>.md (the Test Plan issue; its description holds the ATP body)
          Filename note: the acronym prefix comes from a conforming ladder title; a Plan or Execution whose title does not follow the grammar keeps the legacy TESTPLAN- / TESTEXEC- / RETESTEXEC- prefix.
   7. Update <SESSION_DIR>/test-session-memory.md sections: TMS Artifacts, Test Data, Stage Results > Planning, Checklist > Planning.
 
@@ -444,7 +444,7 @@ Rules:
   - NEVER leave a created artifact in its `create` status or without an assignee (artifact-lifecycle.md §1 + §2). Close the stage by running the light stage verifier (§5).
   - Critical Rule #2 (Plan Before Coding): outputs are plans + outlines, no test code.
   - Surface open_questions to the orchestrator instead of guessing AC behavior.
-  - Source order: Jira field (or `## Acceptance Test Plan (ATP)` fallback comment) is canonical; <PBI_FOLDER>/acceptance-test-plan.md is a read-only cache emitted by bun run jira:sync-issues — never hand-written.
+  - Source order: Jira field (or `## Acceptance Test Plan (ATP)` fallback comment) is canonical; <PBI_FOLDER>/acceptance-test-plan.md is a read-only cache emitted by the tracker's issue sync — never hand-written.
 ```
 
 ### Briefing 3 — Stage 2 Execution subagent
@@ -463,7 +463,7 @@ Context docs:
 Skills to load: /playwright-cli (UI exploration); the active environment's API and DB MCPs ({{API_MCP}} and {{DB_MCP}} from project.yaml). For Bug tickets in Modality jira-xray: also /xray-cli (repro-Test creation at fix-verification time, step 7) + /acli (the Bug↔Test link).
 
 Exact instructions:
-  1. Mark the ticket as actively testing (substrate-driven, idempotent, non-blocking). Resolve `{{jira.transition.<work_type>.start_testing}}` and `{{jira.status.<work_type>.in_test}}` from `.agents/jira-workflows.json` (per AGENTS.md §"Project Variables"). Call `[ISSUE_TRACKER_TOOL] Get Transitions` for `<TICKET_KEY>`. Skip (and emit `skipped_reason`) if any of these hold:
+  1. Mark the ticket as actively testing (substrate-driven, idempotent, non-blocking). Resolve `{{jira.transition.<work_type>.start_testing}}` and `{{jira.status.<work_type>.in_test}}` from the project's workflow catalog (per AGENTS.md §"Project Variables"). Call `[ISSUE_TRACKER_TOOL] Get Transitions` for `<TICKET_KEY>`. Skip (and emit `skipped_reason`) if any of these hold:
        - current status already equals `{{jira.status.<work_type>.in_test}}` -> `"already_in_test"`
        - the substrate slug is undefined for `<work_type>` (e.g. Bug work types without an intermediate in-testing state) -> `"no_in_test_state_for_<work_type>"`
        - the resolved transition id is not available from the current status -> `"transition_not_available_from_<current_status>"`
@@ -513,7 +513,7 @@ Context docs:
   - <PBI_FOLDER>/evidence/ (Stage 2 evidence)
   - <PBI_FOLDER>/context.md (ticket summary)
   - <<REPO_ROOT>>/.agents/skills/sprint-testing/references/reporting-templates.md
-  - <<REPO_ROOT>>/.agents/jira-fields.json (custom field IDs for ATR/ATP — Modality jira-native only)
+  - the field catalog (custom field IDs for ATR/ATP — Modality jira-native only)
 
 Skills to load: /acli (issue updates + comments + transitions + bug creation); in Modality jira-xray also /xray-cli (only when ATR is an Xray Test Execution and Test Run statuses must be updated).
 
@@ -526,10 +526,10 @@ Exact instructions:
   3b. **Close the other two Stage-1 artifacts** (`agentic-qa-core/references/artifact-lifecycle.md` §1) — Modality jira-xray:
         - ATS: membership is now final -> `[ISSUE_TRACKER_TOOL] Transition: {{jira.transition.test_set.done}}` (`designing` -> `close`).
         - ATP: results are in -> `[ISSUE_TRACKER_TOOL] Transition: {{jira.transition.test_plan.complete}}` (`ready` -> `completed`). If the ATP is still at `{{jira.status.test_plan.planning}}` (Stage 1 skipped its transition), fire `{{jira.transition.test_plan.designed}}` FIRST — `complete` is only available from `ready`.
-        On any unmapped slug run the `artifact-lifecycle.md` §4 fallback: list LIVE transitions, ONE AskUserQuestion, fire the live id on yes, recommend `bun run jira:sync-workflows`. NEVER skip silently. Modality jira-native has no items at this altitude — state N/A.
+         On any unmapped slug run the `artifact-lifecycle.md` §4 fallback: list LIVE transitions, ONE AskUserQuestion, fire the live id on yes, recommend regenerating the workflow catalog. NEVER skip silently. Modality jira-native has no items at this altitude — state N/A.
   3a. Materialize the local cache per modality (read-only cache; never hand-write it), then read it back to confirm:
-        - Modality jira-native: `bun run jira:sync-issues get <TICKET_KEY> --include-comments` -> <PBI_FOLDER>/acceptance-test-results.md
-        - Modality jira-xray: `bun run jira:sync-issues get <ATR_KEY>` -> .context/PBI/test-executions/ATR-<ATR_KEY>-<slug>.md (the Test Execution issue; its description holds the ATR body)
+         - Modality jira-native: the tracker's issue sync -> <PBI_FOLDER>/acceptance-test-results.md
+         - Modality jira-xray: the tracker's issue sync -> .context/PBI/test-executions/ATR-<ATR_KEY>-<slug>.md (the Test Execution issue; its description holds the ATR body)
   4. Post QA comment on <TICKET_KEY> via [ISSUE_TRACKER_TOOL] Add Comment using the matching template from reporting-templates.md (Story PASSED/FAILED, or Bug Template C/D).
   5. Transition <TICKET_KEY> via [ISSUE_TRACKER_TOOL] Transition Issue. Resolve from substrate:
        - **Story PASSED** -> `{{jira.transition.story.qa_sign_off}}` (`in_test` -> `qa_approved`).
@@ -708,7 +708,7 @@ Created at `<SESSION_DIR>/test-session-memory.md` — i.e. `.session/sprint-test
 - [ ] ATS left designing + ATR left active (deliberate — both close at Stage 3)
 - [ ] Assignee = self on ATP / ATS / ATR / every Test, set at create time
 - [ ] Light stage verifier run (artifact-lifecycle.md §5) — every line YES or a stated N/A
-- [ ] acceptance-test-plan.md materialized via bun run jira:sync-issues in PBI
+- [ ] acceptance-test-plan.md materialized via the tracker's issue sync in PBI
 
 ### Planning (Bug)
 - [ ] Veto check completed
@@ -739,7 +739,7 @@ Created at `<SESSION_DIR>/test-session-memory.md` — i.e. `.session/sprint-test
 - [ ] [Bug] Re-Test Execution transitioned active -> close (complete) after the repro run is recorded
 - [ ] Every unmapped slug ASKED per artifact-lifecycle.md §4, never silently skipped
 - [ ] Light stage verifier run (artifact-lifecycle.md §5)
-- [ ] acceptance-test-results.md materialized via bun run jira:sync-issues in PBI
+- [ ] acceptance-test-results.md materialized via the tracker's issue sync in PBI
 - [ ] QA comment posted
 - [ ] Ticket transitioned to the work-type terminal QA state via substrate (or skipped on FAILED)
 ```

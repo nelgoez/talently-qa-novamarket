@@ -216,8 +216,8 @@ These are POLICY tables, not INVARIANT rules. They can be amended additively wit
 | Path                                                  | Why it lives here                                                                                                |
 |-------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
 | `cli/`                                                | Installer + agents:setup + vars:check — project-level tooling, ships with every clone                            |
-| `scripts/`                                            | `bun run` script implementations (`api:sync`, `kata:manifest`, `jira:sync-fields`, `lint:skills`, etc.)          |
-| `.agents/` (structure changes only)                   | Schema for `project.yaml`, `jira-fields.json`, `jira-workflows.json`, `jira-required.yaml`. Values stay manual.  |
+| `scripts/`                                            | `bun run` script implementations (`api:sync`, `kata:manifest`, `lint:skills`, etc.)          |
+| `.agents/` (structure changes only)                   | Schema for `project.yaml` and the tracker config manifests. Values stay manual.  |
 | `tests/utils/`                                        | Agnostic utilities — Allure attach helpers, decorators, formatters. Evolution of the utility layer.              |
 | `tests/components/` (Layer 2 + 3 base classes only)   | `TestContext.ts`, `ApiBase.ts`, `UiBase.ts`. NOT per-module `*Api.ts` / `*Page.ts` (those are test-automation).  |
 | `tests/components/` (fixture files)                   | Fixture registry evolution — `ApiFixture.ts`, `UiFixture.ts`, `TestFixture.ts`. New fixture APIs.                |

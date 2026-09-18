@@ -8,8 +8,8 @@
 >
 > **Load this before firing any transition.** The slugs below are the only valid
 > `{{jira.status.<type>.<slug>}}` / `{{jira.transition.<type>.<slug>}}` references; they
-> resolve against `.agents/jira-required.yaml` (`work_types.*.required_statuses` /
-> `required_transitions`) and `.agents/jira-workflows.json` (the workspace-resolved ids).
+> resolve against the tracker's workflow manifest (`work_types.*.required_statuses` /
+> `required_transitions`) and its workspace-resolved status/transition ids.
 
 ## Why this file exists
 
@@ -22,7 +22,7 @@ the harness — the skills created the artifacts, wrote their bodies, linked the
 them where Jira's `Create` transition dropped them.
 
 The root cause was not prose: it was that the harness had **no declared lifecycle** for
-the TMS work types at all. `.agents/jira-required.yaml` declared statuses and transitions
+the TMS work types at all. The tracker's workflow manifest declared statuses and transitions
 for `story`, `bug`, `test_case`, `epic`, `defect`, `improvement`, `tech_story` and
 `tech_debt`, and for nothing else — so no skill could reference a Test Plan / Test
 Execution / Test Set / subtask transition even if its author had wanted to.
@@ -114,12 +114,12 @@ source coverable · **components** = product module. Canon: `AGENTS.md` §9 +
 A project that renamed its statuses, uses a synonym, or is running against a stale catalog
 must not end up with silently un-transitioned artifacts. When a transition is needed:
 
-1. **Resolve** `{{jira.transition.<type>.<slug>}}` from `.agents/jira-workflows.json` (via
-   `.agents/jira-required.yaml`). Present → fire it by **id** and move on.
+1. **Resolve** `{{jira.transition.<type>.<slug>}}` from the project's workflow catalog (via
+   its required-status/transition manifest). Present → fire it by **id** and move on.
 2. **Slug ABSENT for that work type** → do NOT skip silently, and do NOT guess an id.
    Run `[ISSUE_TRACKER_TOOL] Get Transitions: {KEY}` to list the LIVE transitions available
    from the issue's current status (syntax + the id-vs-name gotcha:
-   `.agents/skills/acli/references/gotchas.md` §9 — `acli --status` matches by target status
+   the tracker CLI's status-matching gotcha — `acli --status` matches by target status
    name and has no `--transition-id` flag, so an ambiguous target needs the REST escape hatch).
 3. **Pick the closest candidate by name**, using the synonym table in §4.1, and present
    **ONE** `AskUserQuestion`:
@@ -133,9 +133,9 @@ must not end up with silently un-transitioned artifacts. When a transition is ne
 4. **On yes**: execute with the **live id** (never a name, never a remembered id), record the
    executed transition in the session `progress.md` checkpoint (and in the stage's Transition
    Trail where the skill keeps one), and **RECOMMEND** to the user:
-   `bun run jira:sync-workflows` then `bun run jira:check` — so the catalog learns the
-   mapping and the next session resolves it at step 1. **Never hand-edit
-   `.agents/jira-workflows.json`**: it is generated.
+   regenerate the workflow catalog, then re-run the tracker setup check — so the catalog
+   learns the mapping and the next session resolves it at step 1. **Never hand-edit
+   the workflow catalog**: it is generated.
 5. **On skip**: the artifact stays where it is, and the stage's light verifier (§5) records
    that line as an explicit, stated N/A with the reason. A skip the user chose is fine. A
    skip nobody saw is the bug this file exists to kill.

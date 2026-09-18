@@ -1,6 +1,6 @@
 # Skill Registry (auto-generated)
 
-> Generated: `2026-09-17T23:48:24.938Z`
+> Generated: `2026-09-18T05:04:11.717Z`
 > Generator: `bun scripts/build-skill-registry.ts`
 > Protocol: `.agents/skills/agentic-qa-core/references/skill-resolver.md`
 
@@ -11,31 +11,6 @@ Subagents trust those compact rules and only read the full SKILL.md when explici
 Skills indexed: 20
 
 ---
-## Skill: acli
-
-**Purpose**: Atlassian CLI (official `acli` binary, v1.3+ as of 2026) for Jira Cloud, Confluence Cloud, and org admin tasks from the terminal.
-
-**Compact Rules**:
-- DO: pass `--paginate` (or an explicit `--limit`) on any search whose result is counted, iterated, or decided on. Pagination is opt-in and truncation is silent — there is no warning.
-- DO NOT: read exit 0 as proof a subcommand exists. An unknown subcommand falls back to the parent help and exits 0. Check that the help body actually changed, and never invent a flag — every multi-word flag is kebab-case.
-- DO: verify auth status before any bulk mutation. Auth is per-product (jira / confluence / admin / global are separate sessions) and a silent expiry leaves the batch half-applied with no clean rollback.
-- DO: pass the non-interactive confirmation flag on every mutating command in CI, or the command hangs waiting on stdin.
-- DO NOT: hand-author raw ADF JSON, and do not pass Markdown to a rich-text flag — the CLI never converts it and stores the literal characters. Author in Markdown, convert with `scripts/md-to-adf.ts`, pass the ADF.
-- DO: let the converter's validation gate run on every ADF document before publishing, and round-trip read the field after writing. The gate catches node-level errors; only the read-back catches Jira's silent server-side coercion.
-- DO NOT: assume `workitem edit` takes custom-field values. It hard-rejects every shape with exit 1; editing a custom field on an EXISTING item works only through the REST PUT path.
-- DO NOT: hardcode a `customfield_NNNNN` id in a script or in generated output. Resolve it through the host project's slug catalog — ids differ per workspace, slugs travel.
-- DO NOT: read the Atlassian host from an environment variable. It lives in `.agents/project.yaml` under `issue_tracker.atlassian_url` and is resolved through the accessor; a stale inherited copy once pointed the sync scripts at a dead site.
-- WHEN creating an issue link: `--out` / `--in` are empirically INVERTED against Jira's semantics — `--out` takes the prerequisite, `--in` the dependent. Verify the direction by listing the link afterwards, and recreate with swapped flags if it landed backwards.
-- DO: capture and surface the trace id from any backend failure. It is the only debug signal, and Atlassian Support needs it.
-- WHEN the operation is a known blind spot (enumerate custom fields, edit custom-field values, manage workflows / issue types / versions / components, attachments, watchers, add an item to a sprint): route through REST or the opt-in Atlassian MCP rather than forcing the CLI.
-- DO: prefer API-token auth in scripted contexts, and pin the binary to an explicit version in production pipelines — tracking `latest` has caused same-day mass failures.
-
-**Read full SKILL.md when**: composing a specific command, publishing rich text, running the REST PUT workaround, or working any surface outside Jira work items.
-
-> Source: `.agents/skills/acli/SKILL.md` · phase: `unknown` · extraction strategy: A
-
----
-
 ## Skill: adapt-framework
 
 > ⚠ LOW-CONFIDENCE (extraction strategy B): bullets scraped without context — read the full SKILL.md before relying on any rule below.
@@ -48,7 +23,7 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.agents/skills/adapt-framework/SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.agents\skills\adapt-framework\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -70,7 +45,7 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: you need the full table of hosted references and who cites each one, the deck-hosting details, or the exact `## Dependencies` block shape to add to a skill.
 
-> Source: `.agents/skills/agentic-qa-core/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents\skills\agentic-qa-core\SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -88,13 +63,13 @@ Skills indexed: 20
 - DO NOT: open a how-it-works deck without asking — it launches the user's default browser. Open exactly ONE, then let them come back with questions before offering the next.
 - WHEN opening a deck: prefer the published GitHub Pages URL over the local file, because a project scaffolded from this boilerplate may not carry the HTML. Use the local copy only offline or on explicit request.
 - DO: route a brand-new project through the ordered 4-phase setup path (foundation → Jira catalogs → discovery + adapt → git Strategy Setup). The joining-an-adapted-project checklist covers phase 1 only and is not a substitute.
-- DO NOT: state a Jira status or transition from memory. `.agents/jira-workflows.json` is authoritative — if a status is not in there, it does not exist in the instance.
+- DO NOT: state a Jira status or transition from memory. The project's workflow catalog is authoritative — if a status is not in there, it does not exist in the instance.
 - DO: point library-docs questions at Context7 and troubleshooting at Tavily; ticket WRITES at `/acli`, and detailed ticket READS (custom fields, ACs, ATP/ATR, comments) at the Jira sync script, whose synced `.md` is what you read.
 - DO NOT: suggest swapping the stack. Playwright + KATA + Allure + TypeScript + bun is locked, and KATA is Playwright-specific — a project needing another runner should not start from this boilerplate.
 
 **Read full SKILL.md when**: walking the full 4-phase new-project setup, listing env vars or MCPs in detail, or answering which deck covers a given topic.
 
-> Source: `.agents/skills/agentic-qa-onboard/SKILL.md` · phase: `bootstrap` · extraction strategy: A
+> Source: `.agents\skills\agentic-qa-onboard\SKILL.md` · phase: `bootstrap` · extraction strategy: A
 
 ---
 
@@ -116,7 +91,7 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: building the annotation HTML, choosing shape types, or handling a case the local render cannot cover (e.g. a photo of physical signage that would need anonymization).
 
-> Source: `.agents/skills/bug-screenshot-annotation/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents\skills\bug-screenshot-annotation\SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -141,7 +116,7 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: writing the plan artifact, batching Code-phase tasks, resuming an interrupted session, or reading the ALLOWED/FORBIDDEN path tables themselves.
 
-> Source: `.agents/skills/framework-development/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents\skills\framework-development\SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -168,30 +143,7 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: running Strategy Setup, resolving a specific conflict type, picking a base branch or branch prefix for an unfamiliar strategy, or setting up an isolated worktree.
 
-> Source: `.agents/skills/git-flow-master/SKILL.md` · phase: `implementation` · extraction strategy: A
-
----
-
-## Skill: jira-administration
-
-**Purpose**: Run bounded Jira administration workflows for project Components or Atlassian instance migration.
-
-**Compact Rules**:
-- Exactly ONE mode per run: `components` (`references/components.md`) or `instance-migration` (`references/instance-migration.md`). Load only that mode's reference. Never combine the two, never fall through into the other.
-- Mode unclear → ASK. Do not infer one from a bare "fix Jira" / "sync Jira" request.
-- Load `/acli` before any Jira operation. Load other tool-owner skills only when the selected reference requires them.
-- Missing MCP or Jira credentials = HARD STOP (`AGENTS.md` Critical Rule #10). Name the exact env var, point at `.env` / `.env.example`, ask for an agent-session restart. No workaround, no partial run.
-- Read-first on every mutation: inspect the live state before authoring any plan. Nothing is created, applied, deleted, or repointed without the user's explicit approval given inside the same run.
-- `components`: derive and inspect → author the plan file → dry-run → WAIT for explicit approval → only then `--apply`.
-- `instance-migration`: resolve and confirm BOTH instances → audit and verify reachability → WAIT for explicit approval → only then change files or the `acli` session. That session lives at `~/.config/acli` and is machine-global: re-login repoints every repo on the host, not just this one.
-- The Atlassian host lives in `.agents/project.yaml` → `issue_tracker.atlassian_url` and NOWHERE else locally. A stale `ATLASSIAN_URL` in `.env` or the process environment is contamination to DELETE, never to update — a second copy is what goes stale.
-- Template-repo carve-out: if `.agents/project.yaml` → `project.project_name` is `null`, the repo is an un-onboarded template. Leave `atlassian_url` and `project_key` `null`, say so in the report, and never manufacture a commit to hide the emptiness.
-- Run only the selected reference's verification steps. Never run the other mode's.
-- Forward `$ARGUMENTS` unchanged.
-
-**Read full SKILL.md when**: the mode is ambiguous, a dry-run diff or migration audit looks wrong, or you need the selected reference's step-by-step phases and verification list.
-
-> Source: `.agents/skills/jira-administration/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents\skills\git-flow-master\SKILL.md` · phase: `implementation` · extraction strategy: A
 
 ---
 
@@ -221,7 +173,7 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.agents/skills/judgment-day/SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.agents\skills\judgment-day\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -248,7 +200,67 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: starting a fleet cold, arbitrating a claim, choosing a topology, recovering a Run from a previous session, or writing an unattended automation.
 
-> Source: `.agents/skills/orca-orchestration/SKILL.md` · phase: `unknown` · source: frontmatter `compact_rules` (verbatim)
+> Source: `.agents\skills\orca-orchestration\SKILL.md` · phase: `unknown` · source: frontmatter `compact_rules` (verbatim)
+
+---
+
+## Skill: playwright-best-practices
+
+> ⚠ LOW-CONFIDENCE (extraction strategy B): bullets scraped without context — read the full SKILL.md before relying on any rule below.
+
+**Purpose**: (no description in frontmatter)
+
+**Compact Rules**:
+- ---
+- name: playwright-best-practices
+- description: Use when writing Playwright tests, fixing flaky tests, debugging failures, implementing Page Object Model, configuring CI/CD, optimizing performance, mocking APIs, handling authentication or OAuth, testing accessibility (axe-core), file uploads/downloads, date/time mocking, WebSockets, geolocation, permissions, multi-tab/popup flows, mobile/responsive layouts, touch gestures, GraphQL, error handling, offline mode, multi-user collaboration, third-party services (payments, email verification), console error monitoring, global setup/teardown, test annotations (skip, fixme, slow), test tags (@smoke, @fast, @critical, filtering with --grep), project dependencies, security testing (XSS, CSRF, auth), performance budgets (Web Vitals, Lighthouse), iframes, component testing, canvas/WebGL, service workers/PWA, test coverage, i18n/localization, Electron apps, or browser extension testing. Covers E2E, component, API, visual, accessibility, security, Electron, and extension testing.
+- license: MIT
+- metadata:
+- author: currents.dev
+- version: "1.2"
+- ---
+- This skill provides comprehensive guidance for all aspects of Playwright test development, from writing new tests to debugging and maintaining existing test suites.
+- Consult these references based on what you're doing:
+- **When to use**: Creating new test files, writing test cases, implementing test scenarios
+- **When to use**: Testing mobile devices, touch interactions, responsive layouts
+- **When to use**: Testing WebSockets, geolocation, permissions, multi-tab flows
+- **When to use**: Test failures, element not found, timeouts, unexpected behavior
+- **When to use**: Testing error states, offline mode, network failures, validation
+- (truncated — read full SKILL.md for the rest)
+
+**Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
+
+> Source: `.agents\skills\playwright-best-practices\SKILL.md` · phase: `unknown` · extraction strategy: B
+
+---
+
+## Skill: playwright-cli
+
+> ⚠ LOW-CONFIDENCE (extraction strategy B): bullets scraped without context — read the full SKILL.md before relying on any rule below.
+
+**Purpose**: (no description in frontmatter)
+
+**Compact Rules**:
+- ---
+- name: playwright-cli
+- description: Automate browser interactions, test web pages and work with Playwright tests.
+- allowed-tools: Bash(playwright-cli:*) Bash(npx:*) Bash(npm:*)
+- ---
+- playwright-cli open
+- playwright-cli goto https://playwright.dev
+- playwright-cli click e15
+- playwright-cli type "page.click"
+- playwright-cli press Enter
+- playwright-cli screenshot
+- playwright-cli close
+- playwright-cli open
+- playwright-cli open https://example.com/
+- playwright-cli goto https://playwright.dev
+- (truncated — read full SKILL.md for the rest)
+
+**Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
+
+> Source: `.agents\skills\playwright-cli\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -273,7 +285,7 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: applying the severity rubric or score weighting, probing an external repo for its doctrine, or drafting the posting flow itself.
 
-> Source: `.agents/skills/pr-review-lead/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents\skills\pr-review-lead\SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -294,7 +306,7 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: the requested mode is ambiguous, a `refresh-all` chain fails mid-sequence, or you need the selected reference's own analysis steps and validation gate.
 
-> Source: `.agents/skills/project-context/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents\skills\project-context\SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -320,7 +332,7 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: running any phase's sub-steps, applying a completion gate's content checks, or resolving the pre-`adapt-framework` prerequisite list.
 
-> Source: `.agents/skills/project-discovery/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents\skills\project-discovery\SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -346,7 +358,37 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: driving the CI commands, applying the GO/CAUTION/NO-GO scoring table, resolving a borderline classification, wiring the TMS artifacts, or writing the report.
 
-> Source: `.agents/skills/regression-testing/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents\skills\regression-testing\SKILL.md` · phase: `unknown` · extraction strategy: A
+
+---
+
+## Skill: resend-cli
+
+> ⚠ LOW-CONFIDENCE (extraction strategy B): bullets scraped without context — read the full SKILL.md before relying on any rule below.
+
+**Purpose**: (no description in frontmatter)
+
+**Compact Rules**:
+- ---
+- name: resend-cli
+- description: >
+- Operate the Resend platform from the terminal — send emails (including React Email
+- .tsx templates via --react-email), manage domains, contacts, broadcasts, templates,
+- webhooks, API keys, logs, automations, and events via the `resend` CLI. Use when the
+- user wants to run Resend commands in the shell, scripts, or CI/CD pipelines, or
+- send/preview React Email templates. Always load this skill before running `resend`
+- commands — it contains the non-interactive flag contract and gotchas that prevent
+- silent failures.
+- license: MIT
+- metadata:
+- author: resend
+- version: "2.12.0"
+- homepage: https://resend.com/docs/cli-agents
+- (truncated — read full SKILL.md for the rest)
+
+**Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
+
+> Source: `.agents\skills\resend-cli\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -361,14 +403,14 @@ Skills indexed: 20
 - A refined AC (Given/When/Then) is the business assertion; the outline (`Should <behavior> <condition>`) is its exploration. Keep them distinct.
 - Stories ONLY (no bugs — nothing to refine upstream). Entry status Backlog / Shift-Left QA / Estimation / Ready For Dev.
 - Output = refined ACs + gap/ambiguity questions + the pre-sprint ATP in the `{{jira.acceptance_test_plan}}` field (outline NAMES + coverage estimate, no test code, no execution, NO Test Plan item — `/sprint-testing` Stage 1 creates the item from the field) + the closed `[QA] Shift-Left Review` subtask + the batch report.
-- Tracking subtask `[QA] Shift-Left Review` per accepted Story: find-or-create in Phase 1 (assignee = self; Jira's `create` lands it in `{{jira.status.subtask.active}}`), close in Phase 3 handoff via `{{jira.transition.subtask.complete}}` (-> `{{jira.status.subtask.close}}`). The subtask workflow's status NAMES are `ACTIVE` / `Close`, not "In Progress" / "Done". Exhaustive session annotations (long analysis, refinement traces) go on the SUBTASK, keeping the Story clean. Work type + transitions resolved from `.agents/jira-workflows.json`; no subtask work type in the catalog → skip with a warning, never block.
+- Tracking subtask `[QA] Shift-Left Review` per accepted Story: find-or-create in Phase 1 (assignee = self; Jira's `create` lands it in `{{jira.status.subtask.active}}`), close in Phase 3 handoff via `{{jira.transition.subtask.complete}}` (-> `{{jira.status.subtask.close}}`). The subtask workflow's status NAMES are `ACTIVE` / `Close`, not "In Progress" / "Done". Exhaustive session annotations (long analysis, refinement traces) go on the SUBTASK, keeping the Story clean. Work type + transitions resolved from the project's workflow catalog; no subtask work type in the catalog → skip with a warning, never block.
 - The heart of the skill (Phase 2) = edge cases not in story + ambiguities + gaps — feed them to PO/Dev as questions AND as derived outlines.
 - On taking a Story into refinement (first QA pickup), set `qa_assignee` to self — read-before-write, never overwrite an existing owner (`agentic-qa-core/references/defect-management-doctrine.md` Part 2). This skill files NO Bug/Defect/Improvement; only the QA-Assignee hook applies.
 - On completion: add label `shift-left-reviewed`; transition Backlog → Shift-Left QA → Estimation.
 
 **Read full SKILL.md when**: running the batch grooming pipeline, writing the per-Story `shift-left-refinement.md`, or handling the PO/Dev handoff.
 
-> Source: `.agents/skills/shift-left-testing/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents\skills\shift-left-testing\SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -387,7 +429,7 @@ Skills indexed: 20
 - Three-axis model: **parent** = QA Defect Management process epic (`qa.qa_epics.defect_epic`, found-or-created — NEVER a product/dev epic, NEVER the Story); **issue link** = the source Story (traceability); **components** = product module (Part 4).
 - `priority` (native) is auto-derived from `{{jira.severity}}` (critica→Highest, mayor→High, moderada→Medium, menor→Low, trivial→Lowest); override with a 1-line justification (Part 5.1).
 - Three stages, always in order: Stage 1 Planning → Stage 2 Execution → Stage 3 Reporting. Hand off Stages 4/5/6 to `test-documentation` / `test-automation` / `regression-testing`.
-- Jira is source of truth. Read tickets via `bun run jira:sync-issues get <KEY> --include-comments`, then the synced `.md`. NEVER `acli workitem view` for custom fields (returns `null`).
+- Jira is source of truth. Read tickets via the tracker's issue sync, then the synced `.md`. NEVER `acli workitem view` for custom fields (returns `null`).
 - Bugs run the veto + triage + risk-score decision tree BEFORE any ATP is written.
 - Execution = smoke pass first, then trifuerza (UI/API/DB) exploration; capture evidence under the PBI folder.
 - API testing = three-tool maneuver: OpenAPI MCP for schema (READ-ONLY) → `bun run api:login` for the token (→ `.auth/tokens.env`) → **curl** for authenticated requests. NEVER execute via the OpenAPI MCP. Canon: `agentic-qa-core/references/api-testing-doctrine.md`.
@@ -404,12 +446,12 @@ Skills indexed: 20
 - Mode is a SCOPE, and scope is only one axis: **scope** (single-issue | sprint-wide) × **executors** (1 | N). One executor is the default and is unchanged in every detail. N>1 ("fleet mode") is sprint-wide ONLY, fires when the user answers the executors question with N (`orchestration.max_workers` in `.agents/project.yaml` is a round cap, never a switch); the orchestration gate then decides only who opens the sessions (pass → Orca launches/supervises; fail → the human pastes the same launch lines), and never changes what an issue's pipeline does — only who runs it. Canon: `sprint-testing/references/fleet-conductor.md`.
 - Fleet mode invariants: the launch file is written ALWAYS (gate or no gate — without the gate the human pastes its N lines) and when the gate fails the orchestration tool is NEVER named to the user; a worker = single-issue mode + `PARALLEL_TESTING` / `PARALLEL_TICKET`, no checkpoints, preflight MCP probes NOT skippable, zero sprint-altitude writes; **rounds** (concurrency groups) are NOT **waves** (Jira-status buckets).
 - `sprint-wide` is a REAL session scope, not a folder: `.session/sprint-testing/sprint-<N>/{plan.md, progress.md}` per `agentic-qa-core/references/session-management.md` §6/§7, holding one nested `<JIRA-KEY>/` sub-scope per issue. `plan.md` is the local STP (queue + waves + assignment); `progress.md` is the append-only sprint log, one entry per issue close. There is NO local sprint tracker file — anything the team needs lives in the STP in Jira.
-- Sprint scope is a JQL QUERY, never a hardcoded issue-type list: take the work types declared `coverable: true` in `.agents/jira-required.yaml`, resolve each one's `jira_issue_type` (`A | B | C` = ordered alternatives, first the instance has wins), intersect with `.agents/jira-workflows.json`. A declared type the instance lacks is SKIPPED WITH A NOTE, never a blocker.
+- Sprint scope is a JQL QUERY, never a hardcoded issue-type list: take the work types declared `coverable: true` in the tracker's workflow manifest, resolve each one's `jira_issue_type` (`A | B | C` = ordered alternatives, first the instance has wins), intersect with the project's workflow catalog. A declared type the instance lacks is SKIPPED WITH A NOTE, never a blocker.
 - STP maintenance parity (concurrent testers): `plan.md` ↔ the STP issue DESCRIPTION — rewritten wholesale, so ONE writer (whoever plans the sprint), read-first before writing. `progress.md` ↔ the STP issue COMMENTS — append-only on both sides, one comment per issue close, so two testers never clobber each other. Where the comment log and a Story's ATR disagree, the **ATR wins** — it is the artifact of record.
 
 **Read full SKILL.md when**: starting a sprint cold, resuming a session, or handling a bug-triage / sprint-wide flow not covered by the rules above.
 
-> Source: `.agents/skills/sprint-testing/SKILL.md` · phase: `unknown` · source: frontmatter `compact_rules` (verbatim)
+> Source: `.agents\skills\sprint-testing\SKILL.md` · phase: `unknown` · source: frontmatter `compact_rules` (verbatim)
 
 ---
 
@@ -427,7 +469,7 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: the compact rules above are insufficient (e.g. novel scenario, debugging, or the briefing tells you to load the full skill).
 
-> Source: `.agents/skills/sync-ai-context/SKILL.md` · phase: `unknown` · extraction strategy: B
+> Source: `.agents\skills\sync-ai-context\SKILL.md` · phase: `unknown` · extraction strategy: B
 
 ---
 
@@ -449,7 +491,7 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: writing KATA component code, choosing fixtures for a hybrid flow, or applying the Phase 3 review checklist.
 
-> Source: `.agents/skills/test-automation/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents\skills\test-automation\SKILL.md` · phase: `unknown` · extraction strategy: A
 
 ---
 
@@ -476,32 +518,4 @@ Skills indexed: 20
 
 **Read full SKILL.md when**: resolving TMS modality, computing ROI, writing Gherkin, or wiring US-ATP-ATR-TC traceability links.
 
-> Source: `.agents/skills/test-documentation/SKILL.md` · phase: `unknown` · source: frontmatter `compact_rules` (verbatim)
-
----
-
-## Skill: xray-cli
-
-**Purpose**: Xray Cloud test management via `bun xray` CLI: create/list tests, manage test executions and plans, import JUnit/Cucumber/Xray JSON resul...
-
-**Compact Rules**:
-- DO: confirm the project is in Modality jira-xray before invoking anything here; a jira-native project (no Xray plugin) routes to `/acli` instead. Modality is resolved once in `/test-documentation` Phase 0 and inherited downstream, never re-decided mid-flow.
-- DO NOT: call this CLI from a workflow skill. Workflow skills write `[TMS_TOOL]` pseudocode and load this skill; only this skill owns the literal syntax.
-- DO: pass an explicit `--limit` above the expected count on every list command — all of them default to 20 rows and truncate silently. Read the true count from the `(N total)` header, never by counting rows; a truncated read looks exactly like data loss.
-- DO: capture the key of anything you create from the bare `KEY <PROJ-123>` line or from `--json`, never by scraping the decorated success line — a create whose key was not captured leaves an orphan artifact nothing downstream can link.
-- DO NOT: pass Manual steps inline when creating a test — Xray Cloud silently drops them. Create the test first, add one step per call, then verify the steps landed.
-- DO: pin every ATR execution to a Test Environment (value from `active_env`), so results stay comparable across runs. An execution that slipped through without one is repaired in place, not left.
-- DO: keep the Set-first cascade: the per-Story ATS holds the membership, and the Plan (ATP) and Execution (ATR) derive their test lists from it rather than maintaining their own.
-- DO: fill Story coverage with the Jira-layer issue link from the ATS to the Story. Plan→Story and Execution→Story links are administrative traceability and cover nothing; a direct Test→Story link is a last resort for an instance with no Test Set work type. Plan/Execution/Set MEMBERSHIP is Xray-internal GraphQL and is never an issue link.
-- DO: verify traceability with the one-call three-edge check, never from the coverage edge alone — a missing ATP→Story or ATR→Story link is a FAIL, not a warning, and the same call compares the ATS membership against the Plan and Execution test lists.
-- WHEN a Jira-fallback path created the container without authenticated Xray: the Xray layer never registered the tests and runs come back empty. Reconcile with the per-entity sync (or the bulk repair scan) before importing results.
-- DO: import results onto an existing Execution key, never scoped to a project — the import API cannot set a parent, so a project-scoped import mints a fresh unparented Execution on every run, outside the artifact ladder.
-- DO NOT: hand-craft Xray JSON payloads outside this CLI, or reuse a bearer token past its 24h TTL. A stale token produces silent 401s mid-import that read like network blips.
-- DO: dry-run any import or backup restore before applying. Both write irreversibly across hundreds of tests and runs.
-- WHEN moving between sites: restore in sync-by-key mode (GraphQL ids are re-assigned per site, keys are not), re-authenticate between export and restore because auth holds ONE site at a time, and finish with the Jira instance-migration flow — field ids are reassigned and an old id silently resolves to a different field.
-- DO NOT: push run results for TCs the ROI verdict marked terminal-Manual. It creates audit noise and breaks the Candidate / Manual / Deferred reporting.
-- (truncated — read full SKILL.md for the rest)
-
-**Read full SKILL.md when**: composing a specific command, wiring the canonical end-to-end Story flow, running backup/restore or a cross-site migration, or enriching the synced PBI cache.
-
-> Source: `.agents/skills/xray-cli/SKILL.md` · phase: `unknown` · extraction strategy: A
+> Source: `.agents\skills\test-documentation\SKILL.md` · phase: `unknown` · source: frontmatter `compact_rules` (verbatim)

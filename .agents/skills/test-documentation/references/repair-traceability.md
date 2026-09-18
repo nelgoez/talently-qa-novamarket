@@ -29,7 +29,7 @@ Coverage resolves through an ordered cascade. Each TC must be reachable from its
 
 Two layers, never confused:
 
-- **Jira layer (issue links)**: container→coverable via the `Test` link type (inward `is tested by`; resolve the slug from `.agents/jira-required.yaml`, never hardcode the literal). `ATS→Story` is MANDATORY — it is what fills the coverage panel. `ATP→Story` / `ATR→Story` are administrative traceability only (verified: they contribute ZERO coverage). Direct `TC→Story` is a valid last-resort, not a defect — the defect is having NO path.
+- **Jira layer (issue links)**: container→coverable via the `Test` link type (inward `is tested by`; resolve the slug from the tracker's workflow manifest, never hardcode the literal). `ATS→Story` is MANDATORY — it is what fills the coverage panel. `ATP→Story` / `ATR→Story` are administrative traceability only (verified: they contribute ZERO coverage). Direct `TC→Story` is a valid last-resort, not a defect — the defect is having NO path.
 - **Membership layer** (modality-dependent):
   - **jira-xray**: `TC ∈ ATS/ATP/ATR` is Xray-internal (GraphQL via `/xray-cli`: `addTestsToTestSet` / `getTestSet` etc.). NEVER expressed as an issue link in this modality.
   - **jira-native**: no Xray layer exists — membership IS expressed as `TC→ATS` issue links (explicit carve-out from the rule above). Instance without a Test Set work type → no ATS; direct `TC→Story` links are the fallback (the cascade still resolves at rung ③).
@@ -150,6 +150,6 @@ Output a summary:
 - Always audit before fixing -- never assume what is broken
 - Present the fix plan and wait for confirmation before modifying any TMS artifact
 - Repair toward the ATS path (rung ①); never mass-create direct TC→Story links
-- Resolve the `is tested by` link-type slug from `.agents/jira-required.yaml`, never hardcode it
+- Resolve the `is tested by` link-type slug from the tracker's workflow manifest, never hardcode it
 - Verify all links + membership after applying fixes
 - Tool references (`[TMS_TOOL]`, `[ISSUE_TRACKER_TOOL]`) resolve via the Tool Resolution table in `AGENTS.md`

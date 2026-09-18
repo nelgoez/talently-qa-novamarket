@@ -36,7 +36,7 @@ This skill is specific to **this** Playwright + KATA QA boilerplate and points a
 - DO NOT: open a how-it-works deck without asking — it launches the user's default browser. Open exactly ONE, then let them come back with questions before offering the next.
 - WHEN opening a deck: prefer the published GitHub Pages URL over the local file, because a project scaffolded from this boilerplate may not carry the HTML. Use the local copy only offline or on explicit request.
 - DO: route a brand-new project through the ordered 4-phase setup path (foundation → Jira catalogs → discovery + adapt → git Strategy Setup). The joining-an-adapted-project checklist covers phase 1 only and is not a substitute.
-- DO NOT: state a Jira status or transition from memory. `.agents/jira-workflows.json` is authoritative — if a status is not in there, it does not exist in the instance.
+- DO NOT: state a Jira status or transition from memory. The project's workflow catalog is authoritative — if a status is not in there, it does not exist in the instance.
 - DO: point library-docs questions at Context7 and troubleshooting at Tavily; ticket WRITES at `/acli`, and detailed ticket READS (custom fields, ACs, ATP/ATR, comments) at the Jira sync script, whose synced `.md` is what you read.
 - DO NOT: suggest swapping the stack. Playwright + KATA + Allure + TypeScript + bun is locked, and KATA is Playwright-specific — a project needing another runner should not start from this boilerplate.
 
@@ -160,8 +160,8 @@ After setup, fill `.env` with the credentials the rest of the workflow expects (
 
 | Phase | Goal | How |
 | ----- | ---- | --- |
-| 1. Foundation | Tooling green on this machine | `bun run setup` → fill `.env` → `bun run agents:setup` (project identity + environments in `.agents/project.yaml`) → `bun run pw:install` → `bun run jira:check` |
-| 2. Jira side | The tracker's catalogs mirrored locally | `bun run jira:sync-fields` + `jira:sync-workflows` + `jira:sync-link-types` (generate the `.agents/*.json` catalogs every skill reads) → `/jira-components` (reconcile Jira Components against the app's real modules). First-time Jira provisioning: `docs/setup/jira-setup-guide.md` |
+| 1. Foundation | Tooling green on this machine | `bun run setup` → fill `.env` → `bun run agents:setup` (project identity + environments in `.agents/project.yaml`) → `bun run pw:install` |
+| 2. Jira side | The tracker's catalogs mirrored locally | generate the tracker's field, workflow, and link-type catalogs (the `.agents/*.json` catalogs every skill reads) → `/jira-components` (reconcile Jira Components against the app's real modules). First-time Jira provisioning: `docs/setup/jira-setup-guide.md` |
 | 3. App under test | The framework knows and fits YOUR app | `/project-discovery` (reverse-engineers the target repo → `.context/` with PRD, SRS, business maps) → `/adapt-framework` (adapts KATA, config, CI, MCPs to the stack; its Phase 0 GATES on `.context/` existing, so the order is enforced) → hands off to `/sync-ai-memory` |
 | 4. Git strategy | Branch policy is a decision, not an inherited default | Ask **"set up our git strategy"** (git-flow-master's Strategy Setup: 4 questions → `git_strategy:` block in `.agents/project.yaml`), then optionally `bun run git:policy apply` to mirror it on GitHub. If you skip this, git-flow-master OFFERS it on your first real git action anyway (template-trap guard) — and `bun run git:policy verify` runs on every push via the pre-push hook |
 
@@ -183,7 +183,7 @@ The QA work in this boilerplate runs in two halves: a pre-sprint Shift-Left groo
 
 **Jira QA state machine:**
 
-> **Authoritative source: `.agents/jira-workflows.json`.** Status and transition names below are copied from that file (regenerate with `bun run jira:sync-workflows`). Never write a Jira status from memory — if it is not in `.agents/jira-workflows.json`, it does not exist in the instance.
+> **Authoritative source: the project's workflow catalog.** Status and transition names below are copied from that catalog (regenerate it to refresh). Never write a Jira status from memory — if it is not in the workflow catalog, it does not exist in the instance.
 
 ```
 Backlog → Shift-Left QA → Estimation → Ready For Dev → In Progress → In Review → Ready For QA → In Test → QA Approved → Ready For Release → Deployed to Production
@@ -205,7 +205,7 @@ Two conventions apply to every quality issue you file along the way. **Component
 
 `/sprint-testing UPEX-277`:
 
-1. Syncs the ticket from Jira via `bun run jira:sync-issues get <KEY> --include-comments` (canonical detailed read — `acli view` returns null for custom fields), then reads the materialized `.md` files.
+1. Syncs the ticket from the tracker (canonical detailed read — `acli view` returns null for custom fields), then reads the materialized `.md` files.
 2. Loads the synced context from `.context/PBI/epics/EPIC-<KEY>-<slug>/stories/STORY-<KEY>-<slug>/` (Module = Epic; Jira-synced files are a read-only cache).
 3. Explores the relevant code in the target repo.
 4. Authors the ATP (Acceptance Test Plan) → writes it to the Jira field (or fallback comment) → re-syncs; hand-writes only NON-Jira files (context.md, evidence/).
@@ -244,13 +244,13 @@ Six canonical MCPs ship with the boilerplate:
 | OpenAPI    | API endpoint exploration, contract checking                             |
 | Postman    | Saved request collections, request replay for API tests                 |
 
-The **Atlassian MCP is opt-in** (setup in `docs/mcp/`) — the primary Jira tools are `/acli` and `bun run jira:sync-issues`.
+The **Atlassian MCP is opt-in** (setup in `docs/mcp/`) — the primary tracker tools are `/acli` and the issue sync.
 
 **Decision rule:**
 
 - Use **Context7** for "how to use X" — official docs, current API
 - Use **Tavily** for "how to solve X" — community fixes, troubleshooting
-- Use `/acli` for ticket WRITES (create, transition, comment, link); for detailed READS (custom fields, ACs, ATP/ATR, comments) use `bun run jira:sync-issues get`/`jql`
+- Use `/acli` for ticket WRITES (create, transition, comment, link); for detailed READS (custom fields, ACs, ATP/ATR, comments) use the tracker's issue sync
 - Use **Playwright MCP** for ad-hoc live browser interactions; for scripted runs use `/playwright-cli`
 
 `.mcp.json` lives at the repo root and is **committed** — it is secret-free, referencing secrets as `${VAR}` placeholders resolved from `.env`. Only `.mcp.local.json` (personal overrides) is gitignored.
@@ -265,7 +265,7 @@ Place these in `.env` before running anything that talks to a real environment:
 | ------------------------------------------------ | -------------------------------------------------- |
 | `LOCAL_USER_EMAIL` / `LOCAL_USER_PASSWORD`       | Local app login (Playwright fixtures)              |
 | `STAGING_USER_EMAIL` / `STAGING_USER_PASSWORD`   | Staging smoke tests, manual exploration            |
-| `ATLASSIAN_EMAIL` / API token                    | `acli` Jira CLI (+ Atlassian MCP, if opted in). The site HOST is NOT in `.env` — it lives in `.agents/project.yaml` -> `issue_tracker.atlassian_url`; read it with `bun run --silent jira:url` |
+| `ATLASSIAN_EMAIL` / API token                    | `acli` Jira CLI (+ Atlassian MCP, if opted in). The site HOST is NOT in `.env` — it lives in `.agents/project.yaml` -> `issue_tracker.atlassian_url`; read it from the project's instance config |
 | `XRAY_CLIENT_ID` / `XRAY_CLIENT_SECRET`          | `bun xray` CLI (Xray Cloud authentication)         |
 | `TAVILY_API_KEY`                                 | Tavily MCP                                         |
 | `POSTMAN_API_KEY`                                | Postman MCP                                        |
@@ -342,7 +342,7 @@ Plus 3 project-level community skills installed into `.agents/skills/` (not comm
 - [ ] Did you fill `.env` with your own credentials (`LOCAL_*`, `STAGING_*`, `ATLASSIAN_*`, `XRAY_*`, `TAVILY_API_KEY`, `POSTMAN_API_KEY`)?
 - [ ] Did you populate `.agents/project.yaml` (run `bun run agents:setup` if not yet)?
 - [ ] Does `bun run vars:check` exit clean (0 errors)?
-- [ ] Did you run `bun run jira:check` to verify Jira credentials?
+- [ ] Did you verify the tracker credentials?
 - [ ] Did you run `bun run pw:install` to get Playwright browsers?
 - [ ] Did you run `bun run context:hydrate` to build the `.context/PBI/` Jira cache? (gitignored and regenerable — Jira stays the source of truth)
 - [ ] Does the `git_strategy:` block in `.agents/project.yaml` reflect a CHOSEN strategy (`meta.strategy_source: chosen`)? If it still says `inherited`, git-flow-master will offer Strategy Setup on your first git action — accepting takes 4 questions.

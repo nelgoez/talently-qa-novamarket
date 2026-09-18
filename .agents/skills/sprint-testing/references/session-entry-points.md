@@ -54,15 +54,15 @@ This gate answers "is the environment up / can we get the email?" — it does NO
 
 ### Step 0b — Sprint Test Plan (STP) find-or-create (orchestrator-inline, sprint-wide mode only, first ticket of the sprint)
 
-**Mode gate:** this step runs ONLY in `sprint-wide` mode. In `single-issue` mode SKIP it entirely — that mode creates no sprint session pair and no STP (`SKILL.md` §scope table). Resolve the ticket's sprint number N from its Sprint field — `bun run jira:sync-issues get <KEY>`, then read the sprint value in the generated `.md`; for a whole-sprint pull use `--sprint <active|current|closed|>=N|7,8,10>` (or the `JIRA_SYNC_SPRINTS` env default), which resolves N once for the whole sprint. Ticket with NO sprint → **ASK the user**; never guess. Then find `STP: Sprint#{N}: {objective}` — a **Test Plan** item parented to the **QA Master Test Plan** epic. Missing → create it (find-or-create; `/regression-testing` creates it as fallback if it runs suites first). Present → UPDATE it: the STP is a LIVING sprint planner — add this ticket to its scope and refresh progress after each tested ticket. The STP's DESCRIPTION mirrors the sprint `plan.md` (rewritten wholesale — read-first, one writer) and its COMMENTS mirror the sprint `progress.md` (append-only, one comment per issue close, so concurrent testers never clobber each other); where a comment and a Story's ATR disagree, the ATR wins. The sprint recap Execution `STR: Sprint#{N}: Regression Testing` is created at sprint close, not here (see `sprint-orchestration.md` §STEP 7). Modality jira-native without the Test Plan work type: skip with a note (no sprint-altitude field fallback); non-blocking.
+**Mode gate:** this step runs ONLY in `sprint-wide` mode. In `single-issue` mode SKIP it entirely — that mode creates no sprint session pair and no STP (`SKILL.md` §scope table). Resolve the ticket's sprint number N from its Sprint field — the tracker's issue sync, then read the sprint value in the generated `.md`; for a whole-sprint pull use `--sprint <active|current|closed|>=N|7,8,10>` (or the `JIRA_SYNC_SPRINTS` env default), which resolves N once for the whole sprint. Ticket with NO sprint → **ASK the user**; never guess. Then find `STP: Sprint#{N}: {objective}` — a **Test Plan** item parented to the **QA Master Test Plan** epic. Missing → create it (find-or-create; `/regression-testing` creates it as fallback if it runs suites first). Present → UPDATE it: the STP is a LIVING sprint planner — add this ticket to its scope and refresh progress after each tested ticket. The STP's DESCRIPTION mirrors the sprint `plan.md` (rewritten wholesale — read-first, one writer) and its COMMENTS mirror the sprint `progress.md` (append-only, one comment per issue close, so concurrent testers never clobber each other); where a comment and a Story's ATR disagree, the ATR wins. The sprint recap Execution `STR: Sprint#{N}: Regression Testing` is created at sprint close, not here (see `sprint-orchestration.md` §STEP 7). Modality jira-native without the Test Plan work type: skip with a note (no sprint-altitude field fallback); non-blocking.
 
 ### Step 1 — Fetch the ticket from the issue tracker
 
-> **Prerequisite**: Detailed fetch uses `bun run jira:sync-issues` — NOT `/acli`. Load `/xray-cli` only in Modality jira-xray for the traceability `[TMS_TOOL]` calls. If Session Start §0.1 in `SKILL.md` already loaded it, skip.
+> **Prerequisite**: Detailed fetch uses the tracker's issue sync — NOT `/acli`. Load `/xray-cli` only in Modality jira-xray for the traceability `[TMS_TOOL]` calls. If Session Start §0.1 in `SKILL.md` already loaded it, skip.
 
 ```
 # Detailed read — materializes per-field .md under the STORY folder (ACs, description, comments):
-bun run jira:sync-issues get {TICKET-ID} --include-comments
+# sync the ticket from the tracker (get {TICKET-ID} --include-comments)
 # then READ the synced story.md / acceptance-criteria.md / comments.md
 # NEVER `acli workitem view` for custom fields — it returns null.
 
@@ -157,7 +157,7 @@ The context hierarchy is: Project (system-wide) -> Epic/Module (feature area lik
 
 Derive `<EPIC_KEY>` from the ticket's parent epic and `<EPIC_SLUG>` from the epic/module field — kebab-case (e.g. "Monthly Statement Improvements" -> `monthly-statement`). The module folder is `epics/EPIC-<EPIC_KEY>-<EPIC_SLUG>/`.
 
-**Jira owns the module context.** It lives in the Epic `description`, under a `## Module Context (QA)` heading, and `bun run jira:sync-issues` splits that section out into `module-context.md`. There is no dedicated custom field on purpose: `description` exists on every Jira instance, so this works on a project that never provisions a single custom field.
+**Jira owns the module context.** It lives in the Epic `description`, under a `## Module Context (QA)` heading, and the tracker's issue sync splits that section out into `module-context.md`. There is no dedicated custom field on purpose: `description` exists on every Jira instance, so this works on a project that never provisions a single custom field.
 
 Check whether `module-context.md` exists after the Step-1 sync:
 
@@ -176,7 +176,7 @@ Draft the body from the template at `.context/PBI/templates/module-context-templ
 ```
 # 1. READ the current Epic description first — this is an APPEND, never an overwrite.
 #    The PO owns the text above; QA owns only the '## Module Context (QA)' section.
-bun run jira:sync-issues get <EPIC_KEY>          # read the synced epic.md
+# sync the epic from the tracker          # read the synced epic.md
 
 [ISSUE_TRACKER_TOOL] Update Issue:
   issue: <EPIC_KEY>
@@ -188,7 +188,7 @@ bun run jira:sync-issues get <EPIC_KEY>          # read the synced epic.md
     <the drafted body>
 
 # 2. Materialize it back as module-context.md
-bun run jira:sync-issues get <EPIC_KEY>
+# sync the epic from the tracker
 ```
 
 If a `## Module Context (QA)` section already exists in the description, REPLACE that section only and leave the rest untouched. Module context is REUSABLE — the next ticket in the same module reads it from Jira and skips exploration, on any machine, not just the one that explored.
@@ -232,7 +232,7 @@ Folder naming:
 - `<EPIC_SLUG>`: kebab-case from the ticket's epic/module field.
 - `<STORY_SLUG>`: AI-generated summary, max ~5 words, kebab-case.
 
-Create the folders + the HAND-AUTHORED files (`context.md`, `evidence/`) now, and `test-session-memory.md` under `.session/sprint-testing/<scope>/`. The Jira-mirrored files (`acceptance-test-plan.md` Stage 1, `acceptance-test-results.md` Stage 3, `module-context.md` + `feature-test-plan.md` if epic-level, `test-cases/`) are materialized by `bun run jira:sync-issues` — NEVER hand-write them.
+Create the folders + the HAND-AUTHORED files (`context.md`, `evidence/`) now, and `test-session-memory.md` under `.session/sprint-testing/<scope>/`. The Jira-mirrored files (`acceptance-test-plan.md` Stage 1, `acceptance-test-results.md` Stage 3, `module-context.md` + `feature-test-plan.md` if epic-level, `test-cases/`) are materialized by the tracker's issue sync — NEVER hand-write them.
 
 ### Step 6b — Session env override (record once, session-only)
 
@@ -247,13 +247,13 @@ Every stage resolves `{{WEB_URL}}` / `{{API_URL}}` through this slot first (over
 
 ### Step 7 — Write the initial context.md
 
-> `context.md` is a hand-authored NON-Jira file: session notes, related code, open questions. Do NOT duplicate Jira-mirrored content here — ACs live in the synced `acceptance-criteria.md`, the full ticket in `story.md`, and Team Discussion in `comments.md` (all materialized by `bun run jira:sync-issues`). Reference them; never copy them.
+> `context.md` is a hand-authored NON-Jira file: session notes, related code, open questions. Do NOT duplicate Jira-mirrored content here — ACs live in the synced `acceptance-criteria.md`, the full ticket in `story.md`, and Team Discussion in `comments.md` (all materialized by the tracker's issue sync). Reference them; never copy them.
 
 ```markdown
 # {{PROJECT_KEY}}-{number}: {Title}
 **Ticket:** {{PROJECT_KEY}}-{number} | **Epic/Module:** EPIC-<EPIC_KEY>-<EPIC_SLUG> | **Status:** {status} | **Sprint:** {sprint}
 
-> Jira-sourced detail (read-only caches, not copied here): `story.md`, `acceptance-criteria.md`, `comments.md` — materialized by `bun run jira:sync-issues get <KEY> --include-comments`.
+> Jira-sourced detail (read-only caches, not copied here): `story.md`, `acceptance-criteria.md`, `comments.md` — materialized by the tracker's issue sync.
 
 ## Team Discussion (analysis only — source is comments.md)
 ### Key Decisions
@@ -346,11 +346,11 @@ Prompts / references:
 - `references/acceptance-test-planning.md` — ATP body, Test Analysis, TC nomenclature, traceability.
 - `references/feature-test-planning.md` — higher-granularity feature plan (optional).
 
-> **Prerequisite**: Load `/acli` skill before any `[ISSUE_TRACKER_TOOL]` WRITE. Detailed reads use `bun run jira:sync-issues`, not `/acli`. In Modality jira-xray also load `/xray-cli` for `[TMS_TOOL]` calls. If Session Start §0.1 already loaded them, skip.
+> **Prerequisite**: Load `/acli` skill before any `[ISSUE_TRACKER_TOOL]` WRITE. Detailed reads use the tracker's issue sync, not `/acli`. In Modality jira-xray also load `/xray-cli` for `[TMS_TOOL]` calls. If Session Start §0.1 already loaded them, skip.
 
 Actions:
 
-1. Read the story (ACs, business rules, dependencies) from the synced `.md` (materialized by `bun run jira:sync-issues get <KEY> --include-comments`).
+1. Read the story (ACs, business rules, dependencies) from the synced `.md` (materialized by the tracker's issue sync).
 2. Triage (veto or risk score) — outputs: Full Plan vs Quick Plan vs Skip.
 3. Discover test data via `[DB_TOOL]` on `{{DB_MCP}}` (and/or `[API_TOOL]`).
 4. **ATP item from the field (find-or-create)**: find-or-create the Test Plan item `ATP: {STORY-KEY}: {story title}` FROM the Story's `{{jira.acceptance_test_plan}}` field content — pre-sprint the ATP lives ONLY in the field (shift-left is field-first); author fresh (item + field) when the field is empty. Modality jira-native: write `{{jira.acceptance_test_plan}}` / fallback comment instead.
@@ -363,8 +363,8 @@ Actions:
      - each `Test`: `{{jira.transition.test_case.start_design}}` -> `{{jira.transition.test_case.ready_to_run}}` = `{{jira.status.test_case.ready}}`, parented to the **QA Test Repository** epic.
      - ATP: `{{jira.transition.test_plan.designed}}` -> `{{jira.status.test_plan.ready}}`. **NOT `complete`** — the ATP is COMPLETED at Stage 3, once the ATR results are in.
      - ATS stays `{{jira.status.test_set.designing}}` and ATR stays `{{jira.status.test_execution.active}}`: both close at Stage 3. State it, do not "fix" it.
-     On an unmapped slug run the §4 fallback (list LIVE transitions -> ONE AskUserQuestion -> live id -> recommend `bun run jira:sync-workflows`); never skip silently.
-11. Materialize the read-only cache (never hand-written) per modality: jira-native -> `bun run jira:sync-issues get <KEY> --include-comments` -> `acceptance-test-plan.md` in the STORY folder; jira-xray -> `bun run jira:sync-issues get <ATP_KEY>` -> `.context/PBI/test-plans/ATP-<ATP_KEY>-<slug>.md`. Filename note: the acronym prefix comes from a conforming ladder title; a Plan or Execution whose title does not follow the grammar keeps the legacy `TESTPLAN-` / `TESTEXEC-` / `RETESTEXEC-` prefix.
+      On an unmapped slug run the §4 fallback (list LIVE transitions -> ONE AskUserQuestion -> live id -> recommend regenerating the workflow catalog); never skip silently.
+11. Materialize the read-only cache (never hand-written) per modality: jira-native -> the tracker's issue sync -> `acceptance-test-plan.md` in the STORY folder; jira-xray -> the tracker's issue sync -> `.context/PBI/test-plans/ATP-<ATP_KEY>-<slug>.md`. Filename note: the acronym prefix comes from a conforming ladder title; a Plan or Execution whose title does not follow the grammar keeps the legacy `TESTPLAN-` / `TESTEXEC-` / `RETESTEXEC-` prefix.
 
 Output checkpoint:
 
@@ -383,7 +383,7 @@ Reference: `references/exploration-patterns.md`.
 
 Actions:
 
-0. **Mark ticket as actively testing** (substrate-driven, idempotent, non-blocking): resolve `{{jira.transition.<work_type>.start_testing}}` and `{{jira.status.<work_type>.in_test}}` from `.agents/jira-workflows.json`; transition `<TICKET_KEY>` to the in-test state if it is not already there. Skip cleanly when the substrate has no in-test state for the work type (e.g. Bugs in this boilerplate's default substrate). Detail in `sprint-orchestration.md` Briefing 3 Step 1.
+0. **Mark ticket as actively testing** (substrate-driven, idempotent, non-blocking): resolve `{{jira.transition.<work_type>.start_testing}}` and `{{jira.status.<work_type>.in_test}}` from the project's workflow catalog; transition `<TICKET_KEY>` to the in-test state if it is not already there. Skip cleanly when the substrate has no in-test state for the work type (e.g. Bugs in this boilerplate's default substrate). Detail in `sprint-orchestration.md` Briefing 3 Step 1.
 1. **Smoke test (5-10 min, ALWAYS FIRST)**: verify basic functionality works, no blocking errors. Go (proceed) or No-Go (STOP and report).
 2. **Deep exploration** as applicable:
    - UI on `{{WEB_URL}}` via `[AUTOMATION_TOOL]`.
@@ -414,7 +414,7 @@ Actions:
 
 1. Compile TC summary (total, PASSED, FAILED, pass rate).
 2. Fill the ATR Test Report via `[TMS_TOOL] atr update {ATR-ID} --report "..."` (or write `{{jira.acceptance_test_results}}` / fallback comment in Modality jira-native). Mark ATR complete.
-3. Materialize the read-only cache (never hand-written) per modality: jira-native -> `bun run jira:sync-issues get <KEY> --include-comments` -> `acceptance-test-results.md` in the STORY folder; jira-xray -> `bun run jira:sync-issues get <ATR_KEY>` -> `.context/PBI/test-executions/ATR-<ATR_KEY>-<slug>.md`.
+3. Materialize the read-only cache (never hand-written) per modality: jira-native -> the tracker's issue sync -> `acceptance-test-results.md` in the STORY folder; jira-xray -> the tracker's issue sync -> `.context/PBI/test-executions/ATR-<ATR_KEY>-<slug>.md`.
 4. Post the QA comment to the ticket via `[ISSUE_TRACKER_TOOL]`. Use the user-story templates (PASSED / FAILED) from `reporting-templates.md`.
 5. Transition the ticket via substrate. Decision tree: Story PASSED -> `{{jira.transition.story.qa_sign_off}}`; Bug PASSED -> `{{jira.transition.bug.retest_passed}}`; Story FAILED with `{{FORMAL_BLOCKED_GATE}}=true` -> `{{jira.transition.story.defect_reported}}` (`in_test` -> `blocked`); Story FAILED non-strict (flag false or no `blocked` slug) -> leave in `{{jira.status.story.in_test}}` with linked bug; Bug FAILED -> leave in `{{jira.status.bug.ready_for_qa}}` (or `back` / `re_open` if previously closed). See `sprint-orchestration.md` Briefing 4 Step 5 for the full decision tree.
 6. Attach evidence screenshot paths for the user.

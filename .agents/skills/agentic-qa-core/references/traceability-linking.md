@@ -4,7 +4,7 @@
 > **Use when**: Any time a QA workflow binds a Story to a test artifact, files a defect against a Story, or blocks a Story on an open defect. Concretely: shift-left Test Plan creation, sprint-testing bug filing + blocking, test-documentation Test / Test Execution creation, regression-testing re-coverage. Re-run whenever the coverage or defect graph changes mid-flight.
 > **Companion references**:
 >
-> - `agentic-qa-core/references/acli-integration.md` — slug catalog, `{{jira.*}}` syntax, tool routing for the link-creation write operation (`[ISSUE_TRACKER_TOOL]` → `/acli`).
+> - the tracker's tool-routing notes — slug catalog, `{{jira.*}}` syntax, tool routing for the link-creation write operation (`[ISSUE_TRACKER_TOOL]` → `/acli`).
 > - `acli/references/workitem.md` §link — the per-link-type directionality table, the empirical acli `--out` / `--in` INVERSION gotcha, and the mandatory post-create verification recipe. **Cited here, not duplicated.**
 > - `xray-cli` skill — owns Xray-internal membership (`TC ∈ ATS` / `TC ∈ ATP` / `TC ∈ ATR`) which, in Modality `jira-xray`, is NOT a Jira issuelink. See §9 (including the jira-native carve-out).
 
@@ -37,21 +37,15 @@ Workspace link-type names are workspace-specific. NEVER hardcode the English lit
 - `{{jira.link_types.<slug>}}.outward` → the outward phrase (read from the source issue).
 - `{{jira.link_types.<slug>}}.inward` → the inward phrase (read from the target issue).
 
-Resolution source is `.agents/jira-link-types.json` (workspace state), keyed by slug. Slug syntax follows `AGENTS.md` §7 / `agentic-qa-core/references/acli-integration.md` §Slug-catalog.
+Resolution source is the workspace's link-type catalog (workspace state), keyed by slug. Slug syntax follows `AGENTS.md` §7 and the tracker's slug-catalog notes.
 
-**Hard-fail rule**: if a slug fails to resolve, or `exists_in_workspace` is `false` for that slug, STOP. Do not fall back to a literal name and do not guess the ID. Report the missing entry to the user and re-run:
-
-```bash
-bun run jira:sync-link-types
-```
-
-Then retry. This mirrors the catalog-or-die rule in `acli-integration.md` §Slug-catalog ("If a slug fails to resolve at runtime, STOP — do not fall back to a literal").
+**Hard-fail rule**: if a slug fails to resolve, or `exists_in_workspace` is `false` for that slug, STOP. Do not fall back to a literal name and do not guess the ID. Report the missing entry to the user, regenerate the link-type catalog, then retry. This mirrors the catalog-or-die rule ("If a slug fails to resolve at runtime, STOP — do not fall back to a literal").
 
 ---
 
 ## 3. QA link catalog
 
-All slugs below are present in the seeded `.agents/jira-link-types.json`. Resolve names via `{{jira.link_types.<slug>}}` — the literal column is illustrative only.
+All slugs below are present in the workspace's seeded link-type catalog. Resolve names via `{{jira.link_types.<slug>}}` — the literal column is illustrative only.
 
 | Slug               | Semantic (illustrative)            | Source → Target                                              | Outward (illustrative) | Inward (illustrative) | Required / Optional | When to create                                                                 |
 | ------------------ | ---------------------------------- | ----------------------------------------------------------- | ---------------------- | --------------------- | ------------------- | ------------------------------------------------------------------------------ |
@@ -112,7 +106,7 @@ When the workspace lacks a required link type (`test`, `problem_incident`, or `b
 1. Create the link using the `relates` slug.
 2. Surface the degradation to the user VERBATIM — name the affected issues, the intended semantic, and the lost direction.
 3. Record `link_degraded: <slug> → relates` in the workflow output and in the traceability matrix (§7) so any downstream consumer (coverage report, block gate) can either skip these edges or treat them as informational behind a warning.
-4. Recommend the user create the canonical link type in the workspace and re-run `bun run jira:sync-link-types`, then re-run this phase.
+4. Recommend the user create the canonical link type in the workspace and regenerate the link-type catalog, then re-run this phase.
 
 `relates` is symmetric — both sides read the same phrase, so **direction is lost**. NEVER silently use `relates` for a `blocks` edge: a coverage/block consumer that reads only `blocks` will drop the edge, and the `defect_reported → blocked` gate will fail to detect the block. Degradation is always loud, never silent.
 
@@ -236,7 +230,7 @@ Concretely: the three link reads are the `/acli` link-list read (§4's direction
 ## Hard rules — NEVER do these
 
 - NEVER hardcode link-type names. Always resolve via `{{jira.link_types.<slug>}}` (§2).
-- NEVER fall back to a literal name when a slug fails to resolve — STOP and re-run `bun run jira:sync-link-types` (§2).
+- NEVER fall back to a literal name when a slug fails to resolve — STOP and regenerate the link-type catalog (§2).
 - NEVER use `relates` for a direction-carrying edge (`blocks`, `problem_incident`, `test`) without loudly recording the degradation (§6).
 - NEVER batch multiple links in one call — one call per edge, verify each (§5, §4).
 - NEVER trust acli `--out` / `--in` naming — consult `acli/references/workitem.md` §link inversion gotcha first, then verify direction after every create (§4).

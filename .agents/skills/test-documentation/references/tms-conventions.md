@@ -179,7 +179,7 @@ These are **two independent fields** with two independent lifecycles. Mixing the
 
 ## 5. Workflow state machine
 
-> **Substrate reference — AUTHORITATIVE**: `.agents/jira-workflows.json` (`work_types.test_case`) is the source of truth for every status and transition name below; a status absent from that file does not exist in the instance (`Approved`, `Automating`, `Merge Request` are common inventions and none of them exist). Names below are copied from the canonical UPEX Jira workflow declared in `.agents/jira-workflows.json` (see `.agents/jira-required.yaml` `work_types.test_case` for the methodology's required slugs). Skills resolve these via `{{jira.status.test_case.<slug>}}` and `{{jira.transition.test_case.<slug>}}`. If your project's Jira renames any state or transition, run `bun run jira:sync-workflows` to refresh the substrate so slug -> literal-name mapping stays correct.
+> **Substrate reference — AUTHORITATIVE**: the project's workflow catalog (`work_types.test_case`) is the source of truth for every status and transition name below; a status absent from that catalog does not exist in the instance (`Approved`, `Automating`, `Merge Request` are common inventions and none of them exist). Names below are copied from the canonical UPEX Jira workflow declared in the project's workflow catalog (see the tracker's workflow manifest `work_types.test_case` for the methodology's required slugs). Skills resolve these via `{{jira.status.test_case.<slug>}}` and `{{jira.transition.test_case.<slug>}}`. If your project's Jira renames any state or transition, regenerate the workflow catalog to refresh the substrate so slug -> literal-name mapping stays correct.
 
 ### The full lifecycle
 

@@ -57,24 +57,6 @@
       "mutability": "external-write-after-approval"
     },
     {
-      "alias": "jira-components",
-      "skill": "jira-administration",
-      "mode": "components",
-      "description": "Plan and reconcile Jira Components after explicit approval.",
-      "argumentHint": "[project-key] [target-source]",
-      "forwardArguments": true,
-      "mutability": "external-write-after-approval"
-    },
-    {
-      "alias": "jira-instance-migration",
-      "skill": "jira-administration",
-      "mode": "instance-migration",
-      "description": "Repoint Jira configuration and regenerate catalogs after explicit approval.",
-      "argumentHint": "[source-host] [target-host]",
-      "forwardArguments": true,
-      "mutability": "external-and-local-write-after-approval"
-    },
-    {
       "alias": "master-test-plan",
       "skill": "project-context",
       "mode": "test-plan",

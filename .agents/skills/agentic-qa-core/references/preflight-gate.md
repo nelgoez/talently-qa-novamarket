@@ -1,7 +1,7 @@
 # Readiness Preflight Gate — Shared Doctrine
 
 > Cited by every testing workflow skill in this repo (`shift-left-testing`, `sprint-testing`, `test-documentation`, `test-automation`, `regression-testing`, `framework-development`). Loaded on demand at the very start of a skill, BEFORE its session-resume check and BEFORE any real work.
-> Sibling references: `./session-management.md` (resume contract — runs immediately AFTER this gate), `./orchestration-doctrine.md`, `./acli-integration.md`.
+> Sibling references: `./session-management.md` (resume contract — runs immediately AFTER this gate), `./orchestration-doctrine.md`.
 
 ## 1. Purpose
 

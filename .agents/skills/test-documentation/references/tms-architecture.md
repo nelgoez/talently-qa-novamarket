@@ -105,7 +105,7 @@ Key consequences:
 | Precondition | Yes | Environment, login state, test data, DB state |
 | Specification | Yes | Step-by-step verification (Gherkin or table) |
 | Test Status | Yes | `NOT RUN` / `PASSED` / `FAILED` |
-| Workflow Status | Yes | `Draft` → `In Design` → `READY` → `In Review` → `Candidate` → `In Automation` → `Pull Request` → `AUTOMATED`, plus the `MANUAL` branch and `DEPRECATED` (any state). Exact names + full state machine in §8 — authoritative source `.agents/jira-workflows.json` (`work_types.test_case`) |
+| Workflow Status | Yes | `Draft` → `In Design` → `READY` → `In Review` → `Candidate` → `In Automation` → `Pull Request` → `AUTOMATED`, plus the `MANUAL` branch and `DEPRECATED` (any state). Exact names + full state machine in §8 — authoritative source the project's workflow catalog (`work_types.test_case`) |
 | Priority | Yes | `Critical` / `High` / `Medium` / `Low` |
 | Labels | Yes | At least one scope label (`regression` almost always) |
 | Components | Yes | Affected product module (defect-management doctrine Part 3) |
@@ -307,7 +307,7 @@ Step 6. Derive the ATP's and the ATR's test lists FROM the ATS membership
 Rules:
 
 1. ATP, ATR and ATS names always include the User Story ID. This makes them searchable, unique per story, and impossible to confuse across stories. The feature-level `TS:` is the only Set that scopes to an Epic/module instead.
-2. TC names follow the pattern `{US_ID}: TC#: should <expected outcome> [<connector> <condition>] [given <precondition>]`, where `CORE` is the expected outcome (verb + object phrased after `should`, e.g., `grant access`, `reject login`) and `CONDITIONAL` is the optional connector clause (`when …` / `if …`, e.g., `when credentials are valid`, `if password is incorrect`) plus an optional `given …` precondition. The prefix is ALWAYS the User Story ID, in every modality; Test Set membership is never baked into the title. Under Modality jira-xray it is also **not** a Jira issue link — membership is Xray-internal, managed through `/xray-cli`, never `acli link create` (see `.agents/jira-required.yaml` → `link_types`); jira-native carve-out: with a Test Set work type present, membership IS expressed as TC→ATS issue links. A consequence worth knowing: `bun run jira:sync-issues` talks to the Jira REST API, so under jira-xray it cannot see Test Set membership or Precondition associations at all — only the Xray GraphQL API exposes them.
+2. TC names follow the pattern `{US_ID}: TC#: should <expected outcome> [<connector> <condition>] [given <precondition>]`, where `CORE` is the expected outcome (verb + object phrased after `should`, e.g., `grant access`, `reject login`) and `CONDITIONAL` is the optional connector clause (`when …` / `if …`, e.g., `when credentials are valid`, `if password is incorrect`) plus an optional `given …` precondition. The prefix is ALWAYS the User Story ID, in every modality; Test Set membership is never baked into the title. Under Modality jira-xray it is also **not** a Jira issue link — membership is Xray-internal, managed through `/xray-cli`, never `acli link create` (see the tracker's workflow manifest → `link_types`); jira-native carve-out: with a Test Set work type present, membership IS expressed as TC→ATS issue links. A consequence worth knowing: the tracker's issue sync talks to the Jira REST API, so under jira-xray it cannot see Test Set membership or Precondition associations at all — only the Xray GraphQL API exposes them.
 3. Code-side IDs match the TMS-generated key exactly. The `@atc('PROJ-456')` decorator uses the TMS issue key, not an invented module prefix.
 4. Module prefixes (e.g., `AUTH-`, `ORD-`) are a TMS-display convention only (Test Set names, TMS folders) — they are not the canonical ID, and they never appear in file names: the sync materializes each Test as `test-cases/TEST-<KEY>-<slug>.md`.
 
@@ -371,7 +371,7 @@ Any failing criterion -> the story is not ready to close QA.
 
 ## 8. TC workflow state machine
 
-> **Substrate reference — AUTHORITATIVE**: `.agents/jira-workflows.json` (`work_types.test_case`) is the source of truth for every status and transition name in this section; `.agents/jira-required.yaml` declares which are required. A status that is not in that JSON does not exist in the instance — never write one from memory (`Approved`, `Automating`, `Merge Request` and `Triaged` are common inventions and none of them exist). Skills resolve names via `{{jira.status.test_case.<slug>}}` / `{{jira.transition.test_case.<slug>}}`. Rename detection runs via `bun run jira:sync-workflows`.
+> **Substrate reference — AUTHORITATIVE**: the project's workflow catalog (`work_types.test_case`) is the source of truth for every status and transition name in this section; the tracker's workflow manifest declares which are required. A status that is not in that catalog does not exist in the instance — never write one from memory (`Approved`, `Automating`, `Merge Request` and `Triaged` are common inventions and none of them exist). Skills resolve names via `{{jira.status.test_case.<slug>}}` / `{{jira.transition.test_case.<slug>}}`. Rename detection runs via regenerating the workflow catalog.
 
 The TC workflow spans three IQL stages. Key transitions: `start_design` (Draft -> In Design), `ready_to_run` (In Design -> READY), `for_manual` (READY -> MANUAL), `automation_review_from_ready` (READY -> In Review), `approve_to_automate` (In Review -> Candidate), `start_automation` (Candidate -> In Automation), `create_pr` (In Automation -> Pull Request), `merged` (Pull Request -> AUTOMATED). Never skip states; use `back_from_ready` / `back_from_in_design` for rework, `deprecated` (any -> DEPRECATED) to retire a TC, `recover` (DEPRECATED -> Draft) to revive one.
 
@@ -446,7 +446,7 @@ Goal: Create <K> Xray Test issues in Jira project <PROJECT_KEY> for chunk <I>/<T
 
 Context docs:
   - .session/test-documentation/<scope>/ (session contract artifact — the TC designs Phase 1-2 wrote; the definitions for this chunk live here, NOT in test-specs/, which holds keys only)
-  - .agents/jira-fields.json (custom field IDs)
+  - the field catalog (custom field IDs)
   - .agents/skills/test-documentation/references/tms-architecture.md (TC body shape, naming, linking order)
   - .agents/skills/test-documentation/references/jira-test-management.md §7 (Description template)
 
@@ -501,8 +501,8 @@ Goal: Create <K> Jira Test issues in project <PROJECT_KEY> for chunk <I>/<TOTAL>
 
 Context docs:
   - .session/test-documentation/<scope>/ (session contract artifact — the TC designs Phase 1-2 wrote; the definitions for this chunk live here, NOT in test-specs/, which holds keys only)
-  - .agents/jira-fields.json (custom field IDs auto-discovered by `bun run jira:sync-fields`)
-  - .agents/jira-required.yaml (custom-field manifest)
+  - the field catalog (custom field IDs, auto-discovered)
+  - the tracker's workflow manifest (custom-field manifest)
   - .agents/skills/test-documentation/references/jira-setup.md §3 (Modality jira-native field layout)
   - .agents/skills/test-documentation/references/jira-test-management.md §7 (Description template)
 
@@ -533,7 +533,7 @@ Report format:
   Trailing summary: { "chunk": <I>, "created": K, "failed": 0|N, "duration_seconds": <int> }
 
 Rules:
-  - Custom-field IDs come from .agents/jira-fields.json — do NOT hardcode `customfield_*` numbers.
+  - Custom-field IDs come from the field catalog — do NOT hardcode `customfield_*` numbers.
   - On 429 or 5xx: retry with exponential backoff up to 3 times.
   - On 4xx (excluding 429): stop the chunk and report partial state.
   - Critical Rule #8 (File Operations): never overwrite an existing TC silently — if the summary already exists, report and skip.

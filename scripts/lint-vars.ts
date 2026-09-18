@@ -205,6 +205,8 @@ interface ManifestSlugs {
   workTypes: Map<string, WorkTypeManifestEntry>
   /** `link_types.required.*` + `link_types.optional.*` slugs. Empty if no `link_types:` section. */
   linkTypes: Set<string>
+  /** false when `.agents/jira-required.yaml` is absent — the project has no Jira; skip `{{jira.*}}` validation. */
+  present: boolean
 }
 
 /**
@@ -220,8 +222,17 @@ interface ManifestSlugs {
  */
 function loadManifestSlugs(yamlPath: string): ManifestSlugs {
   if (!existsSync(yamlPath)) {
-    console.error(`FATAL: ${yamlPath} does not exist. Required for Jira slug validation.`);
-    process.exit(1);
+    // No Jira in this project: return an empty, `present: false` manifest so the
+    // caller skips `{{jira.*}}` / link-type / work-type validation entirely.
+    return {
+      all: new Set(),
+      required: 0,
+      optional: 0,
+      unmapped: 0,
+      workTypes: new Map(),
+      linkTypes: new Set(),
+      present: false,
+    };
   }
   const text = readFileSync(yamlPath, 'utf8');
   let parsed: unknown;
@@ -260,6 +271,7 @@ function loadManifestSlugs(yamlPath: string): ManifestSlugs {
     unmapped: Object.keys(unmapped).length,
     workTypes,
     linkTypes,
+    present: true,
   };
 }
 
@@ -847,6 +859,7 @@ function main(): void {
   interface JiraIssue { kind: 'undeclared' | 'unknown-option' | 'unknown-cascading-parent' | 'unknown-cascading-child', hit: JiraSlugHit, detail?: string }
   const jiraIssues: JiraIssue[] = [];
   for (const hit of result.jiraSlugHits) {
+    if (!manifest.present) { break; }
     if (!manifest.all.has(hit.slug)) {
       jiraIssues.push({ kind: 'undeclared', hit });
       continue;
@@ -917,6 +930,7 @@ function main(): void {
   }
   const linkTypeIssues: LinkTypeIssue[] = [];
   for (const hit of result.linkTypeHits) {
+    if (!manifest.present) { break; }
     if (!manifest.linkTypes.has(hit.slug)) {
       linkTypeIssues.push({
         kind: 'undeclared-link-type',
@@ -991,6 +1005,7 @@ function main(): void {
 
   // -- {{jira.work_type.<slug>}}
   for (const hit of result.workTypeHits) {
+    if (!manifest.present) { break; }
     const declaredEntry = manifest.workTypes.get(hit.slug);
     if (!declaredEntry) {
       workTypeIssues.push({
@@ -1018,6 +1033,7 @@ function main(): void {
 
   // -- {{jira.status.<work_type>.<slug>[.id|.category]}}
   for (const hit of result.statusHits) {
+    if (!manifest.present) { break; }
     // Sub-key validation first — purely syntactic.
     if (hit.subKey && !ALLOWED_STATUS_SUB_KEYS.has(hit.subKey)) {
       workTypeIssues.push({
@@ -1069,6 +1085,7 @@ function main(): void {
 
   // -- {{jira.transition.<work_type>.<slug>[.name]}}
   for (const hit of result.transitionHits) {
+    if (!manifest.present) { break; }
     if (hit.subKey && !ALLOWED_TRANSITION_SUB_KEYS.has(hit.subKey)) {
       workTypeIssues.push({
         kind: 'unknown-sub-key',

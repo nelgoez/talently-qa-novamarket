@@ -165,9 +165,9 @@ Always include: `bug`, `exploratory-testing`. Append module or domain labels whe
 
 #### 1.10.1 Custom field detection (per project)
 
-Bug custom fields vary by Jira workspace. Before creating a bug, read `.agents/jira-fields.json` once. For each row in the table below:
+Bug custom fields vary by Jira workspace. Before creating a bug, read the field catalog once. For each row in the table below:
 
-- **If the slug exists** in `jira-fields.json` → populate the custom field via `[ISSUE_TRACKER_TOOL] Edit Issue ... --field <id>`. The slug column shows the canonical reference; the linter validates it against `.agents/jira-required.yaml`.
+- **If the slug exists** in the field catalog → populate the custom field via `[ISSUE_TRACKER_TOOL] Edit Issue ... --field <id>`. The slug column shows the canonical reference; the linter validates it against the tracker's workflow manifest.
 - **If the slug does NOT exist** → omit the custom-field write and include the content as a labeled section in the bug's **Description** field instead, using the headings from the "Description fallback" column.
 
 The Description always carries Steps to Reproduce. Any field that falls back here is appended as an additional section (see template at §1.10.3).
@@ -233,7 +233,7 @@ When custom fields are missing, the bug Description should follow this structure
 
 There are two distinct failure modes:
 
-1. **Slug missing from `.agents/jira-fields.json`** — the methodology declares the slug in `jira-required.yaml` but the user's Jira workspace does not have a matching custom field. Use the **Description fallback** (§1.10.3) — this is the documented degradation path, not an error. No user-facing warning needed beyond noting in the QA comment that the field landed in the Description.
+1. **Slug missing from the field catalog** — the methodology declares the slug in the workflow manifest but the user's Jira workspace does not have a matching custom field. Use the **Description fallback** (§1.10.3) — this is the documented degradation path, not an error. No user-facing warning needed beyond noting in the QA comment that the field landed in the Description.
 2. **Slug exists but the write fails at runtime** — the field id resolved, but `[ISSUE_TRACKER_TOOL] Edit Issue` rejected the value (permissions, screen scheme, value-validation). **DO NOT** attempt to discover or guess alternative field IDs — Jira custom-field IDs are tenant-specific, guessing leads to silent data corruption.
 
 **Protocol on runtime failure**:
@@ -247,8 +247,8 @@ There are two distinct failure modes:
 
 > ⚠️ Custom field `{FIELD_NAME}` (id `{CUSTOMFIELD_ID}`) could not be set on `{BUG-KEY}`.
 > The bug was created without it. Please contact your Jira admin to verify the field id
-> for this project, then re-run `bun run jira:sync-fields --force` and `bun run jira:check`.
-> If the slug needs to be added to the methodology, update `.agents/jira-required.yaml`.
+> for this project, then regenerate the field catalog and re-run the setup check.
+> If the slug needs to be added to the methodology, update the tracker's workflow manifest.
 
 ### 1.11 Attachments
 
@@ -368,7 +368,7 @@ If the run was already imported from CI via `[TMS_TOOL] Import Results`, the Tes
   fields:
     {{jira.acceptance_test_results}}: {ATR body from §2.2}
 
-# Fallback only if {{jira.acceptance_test_results}} is absent in .agents/jira-fields.json:
+# Fallback only if {{jira.acceptance_test_results}} is absent in the field catalog:
 [ISSUE_TRACKER_TOOL] Add Comment:
   issue: {STORY_KEY}
   body: |
@@ -403,8 +403,8 @@ Stage 3 closes the ATS and the ATP in the same pass (Modality jira-xray): ATS vi
 
 After the ATR is in Jira, materialize the read-only cache per modality. This is a sync-emitted cache — NEVER hand-write or hand-edit it. Jira is source of truth. (The old hand-written `test-report.md` mirror is retired.)
 
-- **Modality jira-native**: ATR = the Story's `{{jira.acceptance_test_results}}` field (or `## Acceptance Test Results (ATR)` fallback comment). Run `bun run jira:sync-issues get <STORY_KEY> --include-comments` → `acceptance-test-results.md` at `.../stories/STORY-<KEY>-<slug>/acceptance-test-results.md`.
-- **Modality jira-xray**: ATR = the **Test Execution** issue's `description`. Run `bun run jira:sync-issues get <ATR_KEY>` → `test-executions/ATR-<ATR_KEY>-<slug>.md` (the sync supports the Test Execution issue type). Per-TC run results (pass/fail) are NOT synced — read those via `[TMS_TOOL]` (xray-cli). Filename note: the acronym prefix comes from a conforming ladder title; a Plan or Execution whose title does not follow the grammar keeps the legacy `TESTPLAN-` / `TESTEXEC-` / `RETESTEXEC-` prefix.
+- **Modality jira-native**: ATR = the Story's `{{jira.acceptance_test_results}}` field (or `## Acceptance Test Results (ATR)` fallback comment). Run the tracker's issue sync → `acceptance-test-results.md` at `.../stories/STORY-<KEY>-<slug>/acceptance-test-results.md`.
+- **Modality jira-xray**: ATR = the **Test Execution** issue's `description`. Run the tracker's issue sync → `test-executions/ATR-<ATR_KEY>-<slug>.md` (the sync supports the Test Execution issue type). Per-TC run results (pass/fail) are NOT synced — read those via `[TMS_TOOL]` (xray-cli). Filename note: the acronym prefix comes from a conforming ladder title; a Plan or Execution whose title does not follow the grammar keeps the legacy `TESTPLAN-` / `TESTEXEC-` / `RETESTEXEC-` prefix.
 
 Also append to `context.md`:
 
@@ -615,7 +615,7 @@ Record the gate outcome (hypothesis, cited fact, decision) in the ATR Observatio
 
    Resolve the `blocks` link type by slug only, create one edge, then run the mandatory direction check (confirm the Story's inward partner is the Bug under `is blocked by`) — full mechanics in `agentic-qa-core/references/traceability-linking.md` (§2 slug resolution, §4 directionality + verification, §6 never degrade a `blocks` edge to `relates` silently). Defer `--out`/`--in` flag handling to `/acli` per `[ISSUE_TRACKER_TOOL]`.
 6. PBI `context.md` updated with `Final Status` block.
-7. Nothing to commit — the ATR is canonical in Jira; the synced `acceptance-test-results.md` is a gitignored cache rebuilt by `bun run jira:sync-issues`, and `context.md` is disposable session output (see `AGENTS.md` §9).
+7. Nothing to commit — the ATR is canonical in Jira; the synced `acceptance-test-results.md` is a gitignored cache rebuilt by the tracker's issue sync, and `context.md` is disposable session output (see `AGENTS.md` §9).
 8. For sprint-wide mode, only now is the sprint log appended — one entry in `.session/sprint-testing/sprint-{N}/progress.md` mirrored as one comment on the STP (Stage-3 gate; append-only on both sides).
 
 ### 5.2 Next stage routing
@@ -650,7 +650,7 @@ When some TCs pass and others fail, set ATR result to `PASSED WITH ISSUES`. File
 - [ ] All Stage 2 TCs have final status PASSED or FAILED
 - [ ] Bugs, if any, filed with complete custom fields (§1.10) and human confirmation
 - [ ] ATR body written in the §2.2 plain-text format and uploaded via `[TMS_TOOL]` (or to `{{jira.acceptance_test_results}}` / `## Acceptance Test Results (ATR)` fallback comment)
-- [ ] Synced ATR cache materialized (not hand-written) — jira-native: `acceptance-test-results.md` via `bun run jira:sync-issues get <STORY_KEY> --include-comments`; jira-xray: `test-executions/ATR-<ATR_KEY>-<slug>.md` via `bun run jira:sync-issues get <ATR_KEY>` (per-TC run results read via `[TMS_TOOL]`, not synced)
+- [ ] Synced ATR cache materialized (not hand-written) — jira-native: `acceptance-test-results.md` via the tracker's issue sync; jira-xray: `test-executions/ATR-<ATR_KEY>-<slug>.md` via the tracker's issue sync (per-TC run results read via `[TMS_TOOL]`, not synced)
 - [ ] Correct QA comment template chosen (A/B/C/D) and posted via `[ISSUE_TRACKER_TOOL]`
 - [ ] Evidence Handoff emitted (§3.5): ranked 1-4 shots with business captions, skip list, API blocks redacted, files ls-verified; auto-embed offered
 - [ ] Blocking/defect ticket mentions in the posted comment are real links, not bare keys (§3 real-link rule)

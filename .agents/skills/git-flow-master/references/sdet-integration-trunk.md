@@ -226,7 +226,7 @@ After the final PR merges and CI is green on `main`, delete the trunk (`git push
 
 ## TC / backlog lifecycle interaction
 
-The TMS lifecycle runs **per ticket**, anchored to the ticket-branch PR — not to the final `trunk → main` PR. Status transitions are executed via `/test-documentation` + `[ISSUE_TRACKER_TOOL]` (`/acli`); never by this skill. Cross-check the exact status names against `.agents/jira-workflows.json` before transitioning.
+The TMS lifecycle runs **per ticket**, anchored to the ticket-branch PR — not to the final `trunk → main` PR. Status transitions are executed via `/test-documentation` + `[ISSUE_TRACKER_TOOL]` (`/acli`); never by this skill. Cross-check the exact status names against the project's workflow catalog before transitioning.
 
 | Moment | Action |
 | --- | --- |

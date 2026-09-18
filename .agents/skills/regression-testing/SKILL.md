@@ -56,7 +56,7 @@ Three phases, always in this order: **Execute → Analyze → Report**. Do not s
 - `playwright.config.ts` — reporter config, retry policy, project matrix; needed to interpret retry counts and shard splits.
 - Previous run's Allure report (artifact URL or local download under `./analysis/previous/`) — baseline for trend computation.
 - `kata-manifest.json` — registry of tests and ATCs available; used to cross-reference failed test IDs.
-- `.agents/jira-required.yaml` — Jira refs (project key, work types, transitions) for filing regression issues.
+- the tracker's workflow manifest — Jira refs (project key, work types, transitions) for filing regression issues.
 - `agentic-qa-core/references/defect-management-doctrine.md` — **canonical authority** for classifying (Bug/Defect/Improvement), the mandatory field matrix, QA-Assignee ownership, and the QA process epic when a confirmed regression is filed in Jira (Phase 3). Read BEFORE filing any defect.
 - `agentic-qa-core/references/artifact-lifecycle.md` — **canonical authority** for artifact statuses: the STR closes at `{{jira.status.test_execution.close}}` after the verdict, the RTP stays at `{{jira.status.test_plan.ready}}`, every created artifact carries `assignee` = self, and an unmapped transition slug goes through the §4 fallback instead of a silent skip. Read BEFORE firing any transition.
 
@@ -428,7 +428,7 @@ For each issue that clears the gate:
    customfields/components on an existing issue via REST `PUT
    /rest/api/3/issue/{KEY}`; `qa_assignee` is read-before-write. Because this
    stage may run **from CI**, **load `/acli` first** (it owns auth, syntax, and
-   the REST-PUT pattern in `references/acli-integration.md`).
+    the REST-PUT pattern in the /acli skill's tool-routing notes).
 
 Run the doctrine's **filing gate** (Part 9) before submitting each issue. Save
 the returned Jira key to reference in the report.
@@ -453,7 +453,7 @@ The sprint regression maps to two Jira **items** (items-first by excellence — 
 - The **STR** is born `{{jira.status.test_execution.active}}` and MUST be transitioned to `{{jira.status.test_execution.close}}` via `{{jira.transition.test_execution.complete}}` **after the GO / CAUTION / NO-GO verdict is written** — never before the verdict, never left open.
 - The **RTP** (and any Test Plan this skill only consumed) stays at `{{jira.status.test_plan.ready}}` and is **never completed** by a regression run: the RTP is long-lived, and a suite execution does not finish the plan it ran from. Do NOT fire `{{jira.transition.test_plan.complete}}` here.
 - The **STP** is closed by whoever owns sprint close, not by this skill — unless this skill IS the sprint close (see the sprint-close DoD in `stage-gates.md`), in which case `{{jira.transition.test_plan.complete}}` moves it to `{{jira.status.test_plan.completed}}` after the STR is closed.
-- **Unmapped slug** → `artifact-lifecycle.md` §4 fallback: list the LIVE transitions, propose the closest synonym in ONE `AskUserQuestion`, fire the live id on yes, recommend `bun run jira:sync-workflows`. Never skip silently, never guess an id.
+- **Unmapped slug** → `artifact-lifecycle.md` §4 fallback: list the LIVE transitions, propose the closest synonym in ONE `AskUserQuestion`, fire the live id on yes, recommend regenerating the workflow catalog. Never skip silently, never guess an id.
 
 **Find-or-create the STR before updating it** — never assume another producer already created it; if `/sprint-testing`'s batch close got there first, the find returns its item and this skill only completes it:
 
