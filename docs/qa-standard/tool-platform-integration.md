@@ -50,7 +50,7 @@ rateLimitExceeded` against `project_number:202264815644` — this is the rate li
 - Until the own-client exists, mitigate with `--tpslimit 8` (Google default ~10 queries/sec),
   `--tpslimit-burst 1`, `--transfers 4`, `--fast-list`.
 
-**Long-term fix plan (owner action required, ~5 min in Google Cloud Console):**
+**Long-term fix (done 2026-09-18 for this repo — steps kept as reference for new setups):**
 
 1. Google Cloud Console → create a project (or reuse) → enable **Drive API**.
 2. **OAuth consent screen** → External → add yourself as a test user (Testing is fine for a QA tool).
@@ -170,9 +170,10 @@ Team adoption is a suggestion to the rest of the areas, not a QA unilateral rena
 ## 6. Current wired state (2026-09-18)
 
 - Drive folder `NOVAMARKET` → `/QA` = `1VSV-Wiw53rSwVKRRvxnuejpvHx08-LMn`.
-- rclone remote `gdrive` (local config, own client_id still pending).
+- rclone remote `gdrive` — **own OAuth `client_id` wired** (client JSON backup at
+  `.auth/google-oauth-client.json`, gitignored; token in rclone's local config).
 - `QA-9` card → Sheet `NovaMarket_QA-9_MatrizDePruebas_v0.1`
   (`1k6mbYXUFk3qLmOwB9EcDcK-iQGebwOD2n16mARCLexA`) + Doc `NovaMarket_QA-9_PropuestaAC_v0.1`
-  (`1uyw4pEPaasQnx6rLWi1aUjJMete1NsAL4z807_XspN4`).
-- Open action: replace the shared rclone `client_id` with a project-owned one before 2026
-  retirement (§2.1).
+  (`1uyw4pEPaasQnx6rLWi1aUjJMete1NsAL4z807_XspN4`), linked bidirectionally from the card.
+- Note: the OAuth app is in Testing mode, so the refresh token expires **weekly** — when a `401`
+  appears, re-run `rclone authorize "drive" <client_id> <client_secret>` (§2.1).

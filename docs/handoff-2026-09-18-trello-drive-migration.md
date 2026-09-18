@@ -51,14 +51,13 @@ both under `/QA` and linked bidirectionally from the card. Canonical docs:
 `docs/qa-standard/tool-platform-integration.md` (the playbook) + `docs/qa-standard/traceability-trello-drive.md`
 (ratified). Open items:
 
-1. **Rate limit — long-term fix (owner action).** The rclone shared `client_id` is throttled
-   (403 `Quota exceeded`) and retired in 2026. Create a Google Cloud OAuth client (Desktop app),
-   wire `client_id`/`client_secret` into `gdrive`, re-authorize. Steps + the service-account
-   caveat (not viable: `NOVAMARKET` is "shared with me") in the playbook §2.1.
-2. **Two pending renames** — blocked by the same rate limit. Rename in Drive UI:
-   `Matriz de pruebas - QA-9` → `NovaMarket_QA-9_MatrizDePruebas_v0.1`;
-   `Propuesta AC y Matriz de Pruebas - v0.1` → `NovaMarket_QA-9_PropuestaAC_v0.1`.
-3. **Future tasks (team):** a minimal QA-Update post to the team's Discord; and research whether
+1. ~~Rate limit — long-term fix~~ — **DONE**: own OAuth `client_id` wired (Desktop app; JSON backup
+   at `.auth/google-oauth-client.json`). Service-account caveat + steps in the playbook §2.1.
+2. ~~Two pending renames~~ — **DONE**: both files renamed to the convention (rate limit cleared
+   once the own client was live).
+3. **Testing-mode token expiry** — the OAuth app is in Testing mode, so the refresh token expires
+   weekly; re-run `rclone authorize "drive" <client_id> <client_secret>` on a `401`.
+4. **Future tasks (team):** a minimal QA-Update post to the team's Discord; and research whether
    Discord can be wired into this repo (webhook/MCP) to automate that update.
 
 ## Verification (all green at commit `363f9ea`)
