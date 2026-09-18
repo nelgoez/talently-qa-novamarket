@@ -67,6 +67,34 @@ rateLimitExceeded` against `project_number:202264815644` — this is the rate li
 Gotcha: an OAuth app kept in **Testing** mode expires its refresh token **weekly**. Publish the
 app (External, team-only) or accept the weekly re-auth.
 
+#### Publishing (stop the 7-day refresh-token expiry)
+
+An OAuth app left in **Testing** mode drops its refresh token every **7 days** — that is the
+`401` that forces a re-auth. Publishing stops it. This is a runbook, not code:
+
+1. **Publish the app (preferred, one-time).** Google Cloud Console → the project →
+   **OAuth consent screen** → (the app is already **External**, from the §2.1 setup) →
+   click **Publish app**. This moves the consent screen into production. Because this is a
+   single-user QA tool whose only "user" is the test user already listed, Google's
+   _unverified-app_ warning is harmless: it appears only to people you have not whitelisted,
+   and there are none. After publishing, the refresh token no longer expires weekly.
+2. **Verify the token survives.** Re-run the §2.1 verification
+   (`rclone lsjson gdrive: --drive-root-folder-id <QA_FOLDER_ID> --fast-list`). No `403` and
+   no `401` means the expiry is gone for good.
+
+**Fallback — keep Testing and re-auth weekly.** If publishing is blocked (no GCP billing,
+org policy, or the consent screen cannot move to production), stay in **Testing** mode and
+re-authorize each time the refresh token lapses:
+
+1. `rclone authorize "drive" <client_id> <client_secret>` — browser consent → paste the
+   token JSON.
+2. `rclone config update gdrive token='<json>'` — store the fresh token back into the
+   `gdrive` remote.
+3. Confirm with the §2.1 verification command.
+
+This is the weekly chore publishing removes. The `client_id` / `client_secret` live in
+`.auth/google-oauth-client.json` (gitignored) when the own-client setup from §2.1 was run.
+
 ### 2.2 Creating native Google Docs / Sheets (not just files)
 
 - Uploading a file ≠ creating a native Google Doc/Sheet. Native conversion is driven by
