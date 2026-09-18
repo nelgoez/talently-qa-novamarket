@@ -74,10 +74,23 @@ An OAuth app left in **Testing** mode drops its refresh token every **7 days** �
 
 1. **Publish the app (preferred, one-time).** Google Cloud Console → the project →
    **OAuth consent screen** → (the app is already **External**, from the §2.1 setup) →
-   click **Publish app**. This moves the consent screen into production. Because this is a
-   single-user QA tool whose only "user" is the test user already listed, Google's
-   _unverified-app_ warning is harmless: it appears only to people you have not whitelisted,
-   and there are none. After publishing, the refresh token no longer expires weekly.
+   click **Publish app**. This moves the consent screen into production.
+
+   **The Publish button is grayed out until four metadata fields are filled** (all free, no
+   billing — Google just wants them before external production): **App name** (e.g.
+   `NovaMarket QA Drive Sync`), **user support email** (your gmail), **homepage URL** (the repo
+   URL), and **privacy-policy URL** (any public URL — a Google Doc published to web, or a
+   GitHub gist). Fill them under **OAuth consent screen → Branding / App info**, then Publish
+   un-grays.
+
+   **Restricted-scope caveat (the part that _can_ cost money).** This client uses the `drive`
+   scope, which Google classifies as **restricted**. Publishing to production will likely
+   surface an **OAuth verification** requirement, and restricted scopes require a third-party
+   security assessment (CASA) that is paid. **Do not pay it for this repo.** Publish as
+   _unverified_ production and accept the warning screen — it works fine for the single test
+   user (well under the 100-user unverified cap). If Google hard-blocks the publish on the
+   restricted scope, use the weekly re-auth fallback below instead.
+
 2. **Verify the token survives.** Re-run the §2.1 verification
    (`rclone lsjson gdrive: --drive-root-folder-id <QA_FOLDER_ID> --fast-list`). No `403` and
    no `401` means the expiry is gone for good.
