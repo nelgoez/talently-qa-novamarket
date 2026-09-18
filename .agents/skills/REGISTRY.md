@@ -1,6 +1,6 @@
 # Skill Registry (auto-generated)
 
-> Generated: `2026-09-18T05:04:11.717Z`
+> Generated: `2026-09-18T23:03:15.598Z`
 > Generator: `bun scripts/build-skill-registry.ts`
 > Protocol: `.agents/skills/agentic-qa-core/references/skill-resolver.md`
 
@@ -8,7 +8,7 @@ This file is the per-session compact-rules cache for the Skill Resolver protocol
 The orchestrator copies one or more `## Skill: <slug>` blocks below into every subagent briefing under `## Project Standards (auto-resolved)`.
 Subagents trust those compact rules and only read the full SKILL.md when explicitly instructed.
 
-Skills indexed: 20
+Skills indexed: 21
 
 ---
 ## Skill: adapt-framework
@@ -519,3 +519,22 @@ Skills indexed: 20
 **Read full SKILL.md when**: resolving TMS modality, computing ROI, writing Gherkin, or wiring US-ATP-ATR-TC traceability links.
 
 > Source: `.agents\skills\test-documentation\SKILL.md` · phase: `unknown` · source: frontmatter `compact_rules` (verbatim)
+
+---
+
+## Skill: trello
+
+**Purpose**: Operate the NovaMarket Trello board from the terminal — list boards, read/move/create cards, manage checklists (one item = one acceptance...
+
+**Compact Rules**:
+- DO treat the `trello` CLI as the executor: read `references/board-grammar.md` for the verbs + flags before issuing any command. The CLI is JSON-first and self-documenting (`trello <resource> <verb> --help`).
+- DO read card identity from Trello's own card number — the slug is `{LABEL}-{trello-number}` (`QA-9`), never a hand-assigned `-NNN`.
+- DO put acceptance criteria in the card **checklist** (one item = one AC) and test results in **comments**. The card description holds the `## Test Plan` section and the Drive link-backs.
+- DO treat the Google Drive matrix as the traceability spine: link it from the card description (`## Test Matrix` / `## Docs`), never copy its contents into the card or the repo.
+- DO authenticate from `TRELLO_API_KEY` + `TRELLO_TOKEN` in `.env` (`trello auth set`). Never hardcode a token or key.
+- DO NOT rename cards or normalize discipline labels on QA's own initiative — that is a PO / Engineering Manager decision (see the traceability standard).
+- DO NOT use this skill for Jira/Atlassian ticket operations.
+
+**Read full SKILL.md when**: the board grammar, slug rule, or Drive link-back below is insufficient, or when a command needs its exact sub-verbs and flags (then read `references/board-grammar.md`).
+
+> Source: `.agents\skills\trello\SKILL.md` · phase: `unknown` · extraction strategy: A
