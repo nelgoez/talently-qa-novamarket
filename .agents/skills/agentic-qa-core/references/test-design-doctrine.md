@@ -1,3 +1,5 @@
+> NOTE (Trello remap): this project runs Trello + Google Drive, not Jira/Xray. The Jira mechanics below are remapped in docs/qa-standard/traceability-trello-drive.md — the principles carry over; the {{jira.*}} specifics do not apply here.
+
 # Test-Design Doctrine — deriving test cases from acceptance criteria
 
 > **Canonical, shared doctrine.** This is the single source of truth for *how* a

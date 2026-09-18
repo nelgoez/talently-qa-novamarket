@@ -12,8 +12,6 @@
  *
  * Companion to:
  *   - `scripts/lint-vars.ts`          (linter for {{VAR}} / <<VAR>> usage)
- *   - `scripts/sync-jira-fields.ts`   (Jira custom-fields catalog)
- *   - `scripts/check-jira-setup.ts`   (manifest vs catalog validator)
  *
  * ============================================================================
  * VARIABLE MODEL (S8)
@@ -24,7 +22,7 @@
  *   - FLAT vars        — top-level sections (project, backend, frontend,
  *                        database, issue_tracker, testing). Each leaf is a
  *                        single value. Skills reference them as bare
- *                        {{PROJECT_KEY}}, {{ATLASSIAN_URL}}, etc.
+ *                        {{PROJECT_KEY}}, {{ISSUE_TRACKER}}, etc.
  *
  *   - ENV-SCOPED vars  — under `environments:`. Each environment (local,
  *                        staging, production, …) owns the same four leaves:
@@ -56,11 +54,6 @@
  *     FRONTEND_REPO, FRONTEND_STACK, FRONTEND_ENTRY
  *     DB_TYPE
  *     ISSUE_TRACKER, ISSUE_TRACKER_CLI
- *
- *   NOT seedable from the environment: `issue_tracker.atlassian_url`. It is the
- *   source of truth for the Atlassian host, so accepting `ATLASSIAN_URL` here
- *   would let a stale value inherited from the parent shell overwrite the
- *   versioned one on every --non-interactive run.
  *     DEFAULT_ENV, TMS_CLI
  *
  *   ENV-SCOPED — pattern <KEY>_<ENV>, where KEY is the env-scoped leaf and
@@ -107,7 +100,7 @@ const DEFAULT_ENVS = ['local', 'staging'];
 const ENV_CHOICES = ['local', 'staging', 'production', 'dev', 'qa', 'uat'];
 
 // ============================================================================
-// COLORS / OUTPUT (mirrors scripts/sync-jira-fields.ts)
+// COLORS / OUTPUT
 // ============================================================================
 
 const colors = {
@@ -150,13 +143,7 @@ interface FlatFieldSpec {
   key: string
   /**
    * UPPER_SNAKE_CASE env-var name that seeds this field in non-interactive
-   * mode, or `null` for a field that must NEVER be seeded from the environment.
-   *
-   * `null` is not a missing feature. `atlassian_url` uses it because seeding
-   * that field from `ATLASSIAN_URL` inverts the precedence the yaml exists to
-   * establish: a stale host inherited from the parent shell would overwrite the
-   * correct versioned value on any `--non-interactive` run, which is the exact
-   * corruption the anchor was introduced to stop.
+   * mode.
    */
   envVar: string | null
   validator: ValidatorKind
@@ -188,10 +175,6 @@ const FLAT_FIELDS: FlatFieldSpec[] = [
 
   { section: 'issue_tracker', key: 'issue_tracker', envVar: 'ISSUE_TRACKER', validator: 'non_empty' },
   { section: 'issue_tracker', key: 'issue_tracker_cli', envVar: 'ISSUE_TRACKER_CLI', validator: 'non_empty' },
-  // envVar: null — see FlatFieldSpec.envVar. This field is the source of truth
-  // for the Atlassian host; seeding it from the environment would let a stale
-  // inherited value overwrite the versioned one.
-  { section: 'issue_tracker', key: 'atlassian_url', envVar: null, validator: 'url' },
 
   // default_env is special: validated against the live env list at write time.
   { section: 'testing', key: 'default_env', envVar: 'DEFAULT_ENV', validator: 'env_select' },
@@ -271,7 +254,7 @@ VARIABLE MODEL:
 
     FLAT       — top-level sections (project, backend, frontend, database,
                  issue_tracker, testing). Skills reference them as bare
-                 {{PROJECT_KEY}}, {{ATLASSIAN_URL}}, etc.
+                 {{PROJECT_KEY}}, {{ISSUE_TRACKER}}, etc.
 
     ENV-SCOPED — under \`environments:\`. Each environment owns the same four
                  leaves: web_url, api_url, db_mcp, api_mcp. Skills reference
@@ -304,10 +287,6 @@ ENV-VAR MAPPING (--non-interactive):
     FRONTEND_REPO, FRONTEND_STACK, FRONTEND_ENTRY
     DB_TYPE
     ISSUE_TRACKER, ISSUE_TRACKER_CLI
-
-  NOT seedable from the environment: issue_tracker.atlassian_url (source of
-  truth for the Atlassian host — a stale ATLASSIAN_URL must never overwrite it).
-  Set it interactively, or via the installer's day-0 prompt.
     DEFAULT_ENV, TMS_CLI
 
   ENV-SCOPED — pattern <KEY>_<ENV>:

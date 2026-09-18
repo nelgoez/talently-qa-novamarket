@@ -66,12 +66,10 @@ function display(spec: VarSpec | undefined, value: string): string {
  * shadows a corrected `.env`, and a full application restart does not clear it
  * because the value is re-inherited every time.
  *
- * That is not hypothetical: a stale `ATLASSIAN_URL` made `jira:sync-issues`
- * overwrite `.context/PBI/` with content from a pre-migration Atlassian site
- * while reporting success (upex-bunkai-tms, 2026-08-10). Identity values are
- * anchored to `.agents/project.yaml` now (see `cli/lib/atlassian-instance.ts`),
- * but that fixes one variable. This rule attacks the whole class: ANY manifest
- * variable whose process value disagrees with `.env` fails the check loudly.
+ * That is not hypothetical: a stale value inherited from a parent shell silently
+ * shadowed a corrected `.env` while the tooling reported success. This rule
+ * attacks the whole class: ANY manifest variable whose process value disagrees
+ * with `.env` fails the check loudly.
  *
  * Diagnosing a hit: walk the process ancestry with `ps eww -p <pid>` to find who
  * injected it, and test the login shell in isolation with
@@ -192,7 +190,7 @@ function main(): void {
         warnings.push(
           `STALE_IN_ENV_FILE: '${spec.name}' still has a value in .env, but nothing reads it from `
           + 'there anymore. Delete the line — a leftover copy is exactly what goes stale after a '
-          + 'migration. Source of truth: .agents/project.yaml (`bun run --silent jira:url`).',
+          + 'migration.',
         );
       }
     }

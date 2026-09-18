@@ -49,12 +49,8 @@ import {
   promptForVar,
   reloadDotEnv,
 } from '../install.ts';
-import {
-  resolveAtlassianInstance,
-  writeAtlassianUrlToYaml,
-} from './atlassian-instance.ts';
 import * as tui from './tui.ts';
-import { criticalVars, valueSourceOf, VAR_MANIFEST, varsFor } from './variables-manifest.ts';
+import { criticalVars, varsFor } from './variables-manifest.ts';
 
 // ----------------------------------------------------------------------------
 // Constants + options
@@ -118,41 +114,12 @@ const COLORS = {
  * backup failure does not block the flow, but it is surfaced.
  */
 /**
- * The current value of a manifest var, from whatever source its spec declares.
+ * The current value of a manifest var, read from `.env`.
  *
- * `.env` is the source for almost everything, but not for all of it: a var with
- * `valueSource: 'atlassian-instance'` is read from `.agents/project.yaml` via
- * the canonical resolver. Every consumer that needs "the value of this var" must
- * go through here, or a yaml-sourced var silently reads as unset and gets
- * skipped — a failure that looks exactly like "not configured yet".
- *
- * Returns `''` when unset or unresolvable, matching the `.env` read it replaces.
+ * Returns `''` when unset, matching the `.env` read it replaces.
  */
 function currentValueOf(spec: VarSpec, env: Record<string, string>): string {
-  if (valueSourceOf(spec) === 'atlassian-instance') {
-    try { return resolveAtlassianInstance().baseUrl; }
-    catch { return ''; }
-  }
   return (env[spec.name] ?? '').trim();
-}
-
-/** Human label for where a var's value is written, used in prompts + reports. */
-function sourceLabelOf(spec: VarSpec): string {
-  return valueSourceOf(spec) === 'atlassian-instance' ? '.agents/project.yaml' : '.env';
-}
-
-/**
- * Vars written on THIS machine — `.env` plus the yaml-sourced ones.
- *
- * Deliberately wider than `varsFor('local')`: a var can be written locally
- * without being written to `.env`. Filtering the interactive walk by destination
- * alone would silently drop ATLASSIAN_URL from every prompt, and "the installer
- * stopped asking" is a bug users report as "it forgot my Jira".
- */
-function localWriteVars(): VarSpec[] {
-  return VAR_MANIFEST.filter(
-    spec => spec.destinations.includes('local') || valueSourceOf(spec) !== 'env-file',
-  );
 }
 
 async function backupEnv(): Promise<string | null> {
@@ -356,9 +323,6 @@ async function runRemote(
 
   for (const spec of githubVars) {
     const row = ensureRow(rows, spec);
-    // NOT every github-bound var lives in `.env`: ATLASSIAN_URL is read from
-    // `.agents/project.yaml`, so the yaml is the single origin for both the
-    // local tooling and the CI secret and the two cannot drift apart.
     const value = currentValueOf(spec, existing);
 
     if (value.length === 0) {
@@ -421,26 +385,6 @@ function printReport(rows: Map<string, VarReportRow>): void {
 }
 
 // ----------------------------------------------------------------------------
-// D6 — Xray / Atlassian CI wiring notice
-// ----------------------------------------------------------------------------
-
-/**
- * If any XRAY_* / ATLASSIAN_* secret was pushed, print a one-line reminder that
- * their `env:` lines in `.github/workflows/regression.yml` are commented out.
- * We do NOT edit the workflow (D6 default = notify only).
- */
-function maybeNoticeXrayAtlassian(setNames: string[]): void {
-  const touched = setNames.filter(n => n.startsWith('XRAY_') || n.startsWith('ATLASSIAN_'));
-  if (touched.length === 0) { return; }
-  process.stdout.write(
-    `\n${COLORS.yellow}Note:${COLORS.reset} pushed ${touched.join(', ')} as secrets, but their `
-    + `${COLORS.bold}env:${COLORS.reset} lines in `
-    + `${COLORS.bold}.github/workflows/regression.yml${COLORS.reset} are commented out. `
-    + 'Uncomment them if you run AUTO_SYNC in CI.\n',
-  );
-}
-
-// ----------------------------------------------------------------------------
 // CRITICAL-set path (menu option "a") — set / reset the project-independent
 // tool credentials. Idempotent: already-set vars are kept unless the user opts
 // to overwrite (or `--force` is passed). Local-destination upsert only.
@@ -467,7 +411,7 @@ async function promptVarsInto(
 
     if (alreadySet && !opts.force) {
       const overwrite = await tui.confirm({
-        message: `${spec.name} is already set (${sourceLabelOf(spec)}). Overwrite it?`,
+        message: `${spec.name} is already set (.env). Overwrite it?`,
         initialValue: false,
       });
       if (tui.isCancel(overwrite) || !overwrite) {
@@ -480,22 +424,6 @@ async function promptVarsInto(
     if (entered.length === 0) {
       // Blank input keeps any existing value (idempotent, no clobber).
       row.local = alreadySet ? 'set' : 'skipped';
-      continue;
-    }
-
-    // A yaml-sourced var is written to its own file immediately — batching it
-    // into `collected` would put it back in `.env`, which is the whole point of
-    // the split. A write failure is reported and does NOT abort the walk.
-    if (valueSourceOf(spec) === 'atlassian-instance') {
-      try {
-        const written = writeAtlassianUrlToYaml(entered);
-        process.stdout.write(`  ${tui.statusIcon('ok')} ${spec.name} → .agents/project.yaml (${written})\n`);
-        row.local = 'set';
-      }
-      catch (err) {
-        tui.log.warn(`${spec.name}: ${(err as Error).message}`);
-        row.local = 'failed';
-      }
       continue;
     }
 
@@ -562,7 +490,7 @@ async function runMenu(opts: VariablesFlowOptions): Promise<void> {
 
   if (choice === 'walk') {
     tui.section('Set variables one by one');
-    await promptVarsInto(localWriteVars(), opts, rows);
+    await promptVarsInto(varsFor('local'), opts, rows);
   }
 
   if (choice === 'critical' || choice === 'everything') {
@@ -583,10 +511,6 @@ async function runMenu(opts: VariablesFlowOptions): Promise<void> {
   }
 
   printReport(rows);
-
-  if ((choice === 'remote' || choice === 'everything') && !remoteOutcome.blocked) {
-    maybeNoticeXrayAtlassian(remoteOutcome.setNames);
-  }
 }
 
 // ----------------------------------------------------------------------------
@@ -656,8 +580,4 @@ export async function runVariablesFlow(opts: VariablesFlowOptions): Promise<void
   }
 
   printReport(rows);
-
-  if (doRemote && !remoteOutcome.blocked) {
-    maybeNoticeXrayAtlassian(remoteOutcome.setNames);
-  }
 }

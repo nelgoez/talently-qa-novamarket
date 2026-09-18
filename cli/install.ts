@@ -22,16 +22,11 @@
  *     13-github-repo    GitHub repository (optional)
  *
  *   PHASE 4 — VERIFICATION
- *     11-verify-clis    Verify external CLIs (bun, gh, acli, playwright-cli, resend, jq)
+ *     11-verify-clis    Verify external CLIs (bun, gh, rg, playwright-cli, resend, orca)
  *     14-state-write    Persist `.template/installer.state.json`
  *
  *   PHASE 5 — INITIAL CONFIGURATION
  *     7-agents-setup    Run agents:setup (.agents/project.yaml populator)
- *     12.4-acli-auth    Atlassian credentials + acli session login
- *     13-jira-sync        Catalog-source prompt (own / upex / skip) → fields +
- *                         workflows + link-types sync; empty {} placeholders for
- *                         any catalog still missing (anti STALE-PATH)
- *     14-jira-check     `bun run jira:check`
  *
  * Idempotency: each step writes an ISO timestamp to state.steps[<key>] on success.
  * Re-runs skip completed steps unless overridden via:
@@ -59,7 +54,6 @@
  *   INSTALL_FORCE_COMMUNITY=1             Re-run community skill install even if state shows it ran
  *   INSTALL_FORCE_GITHUB=1                Re-run GitHub remote setup even if a remote is already wired
  *   INSTALL_SKIP_COMMUNITY=1              Skip `bunx skills add` step
- *   INSTALL_SKIP_JIRA=1                   Skip optional Jira bootstrap
  *   INSTALL_SKIP_API=1                    Skip optional API auth bootstrap
  *   INSTALL_SKIP_DIRENV=1                 Skip direnv autoload setup
  */
@@ -76,15 +70,10 @@ import {
   repairClaudeSkillsAlias,
   repairCommandWrappers,
 } from './lib/agent-compatibility.ts';
-import {
-  resolveAtlassianInstance,
-  toSiteSlug,
-  writeAtlassianUrlToYaml,
-} from './lib/atlassian-instance.ts';
 import { playwrightBrowsersInstalled } from './lib/playwright-cache.ts';
 import * as tui from './lib/tui.ts';
 import { runVariablesFlow } from './lib/variables-flow.ts';
-import { criticalVars, nonCriticalVars, valueSourceOf, varsFor } from './lib/variables-manifest.ts';
+import { criticalVars, nonCriticalVars, varsFor } from './lib/variables-manifest.ts';
 
 // ============================================================================
 // Types
@@ -161,10 +150,6 @@ interface InstallState {
   github?: GithubRemoteInfo
   postInstall: {
     agentsSetup: 'pending' | 'completed' | 'skipped-non-interactive' | 'failed'
-    acliAuth: 'pending' | 'completed' | 'skipped-non-interactive' | 'skipped-no-binary' | 'skipped-no-auth' | 'failed'
-    jiraSyncFields: 'pending' | 'completed' | 'skipped-non-interactive' | 'skipped-no-auth' | 'skipped-no-admin' | 'failed'
-    jiraSyncWorkflows: 'pending' | 'completed' | 'skipped-non-interactive' | 'skipped-no-auth' | 'skipped-no-admin' | 'failed'
-    jiraCheck: 'pending' | 'completed' | 'skipped-non-interactive' | 'skipped-prereq' | 'failed'
   }
 }
 
@@ -238,14 +223,6 @@ const EXTERNAL_CLIS: ReadonlyArray<{ name: string, install?: string, docs: strin
     purpose: 'ripgrep — fast repo search. Bundled with Claude Code; OpenCode and Codex use the system binary',
   },
   {
-    // Promoted to the sole default tool for Jira/Confluence/TMS work
-    // (Atlassian MCP is opt-in via docs/mcp/).
-    name: 'acli',
-    docs: 'https://developer.atlassian.com/cloud/acli/guides/install-acli/',
-    purpose: 'Atlassian (Jira/Confluence) CLI — used by /acli skill',
-    required: true,
-  },
-  {
     // Binary produced by @playwright/cli is `playwright-cli`, NOT
     // @playwright/test (devDep test runner library producing no global
     // binary).
@@ -253,11 +230,6 @@ const EXTERNAL_CLIS: ReadonlyArray<{ name: string, install?: string, docs: strin
     install: 'bun add -g @playwright/cli@latest',
     docs: 'https://playwright.dev/agent-cli/introduction',
     purpose: 'browser automation — screenshots, traces, recordings',
-  },
-  {
-    name: 'jq',
-    docs: 'https://jqlang.org/',
-    purpose: 'JSON processor — required by /acli skill for parsing acli --json output',
   },
   {
     name: 'resend',
@@ -427,7 +399,6 @@ const FORCE_GENTLE_AI = process.env.INSTALL_FORCE_GENTLE_AI === '1';
 const SYNC_SKILLS = process.argv.includes('--sync-skills');
 const FORCE_COMMUNITY = process.env.INSTALL_FORCE_COMMUNITY === '1' || SYNC_SKILLS;
 const FORCE_GITHUB = process.env.INSTALL_FORCE_GITHUB === '1';
-const SKIP_JIRA = process.env.INSTALL_SKIP_JIRA === '1';
 const SKIP_API = process.env.INSTALL_SKIP_API === '1';
 const SKIP_COMMUNITY = process.env.INSTALL_SKIP_COMMUNITY === '1';
 const SKIP_DIRENV = process.env.INSTALL_SKIP_DIRENV === '1';
@@ -1195,8 +1166,6 @@ async function configureMcps(agents: AgentId[], state: InstallState): Promise<vo
 //
 // The installer prompts ONLY for the CRITICAL set (manifest `critical: true`),
 // identical across both boilerplates:
-//   - ATLASSIAN_EMAIL / ATLASSIAN_API_TOKEN — Jira/acli credentials (.env)
-//   - ATLASSIAN_URL — the Jira/acli SITE HOST, persisted to .agents/project.yaml
 //   - RESEND_API_KEY — email-testing tool (also authenticates the resend CLI)
 //   - TAVILY_API_KEY — the pre-configured Tavily web-search MCP
 // These exist independent of any project-under-test, so a fresh clone can
@@ -1204,25 +1173,13 @@ async function configureMcps(agents: AgentId[], state: InstallState): Promise<vo
 //
 // Everything else is NON-critical and is NEVER asked here (nor warned about):
 //   - TEST_ENV — written to its manifest default ("local") WITHOUT prompting.
-//   - LOCAL_USER_* / STAGING_USER_*, XRAY_*, DBHUB_*, API_*, POSTMAN_*, … —
+//   - LOCAL_USER_* / STAGING_USER_*, DBHUB_*, API_*, POSTMAN_*, … —
 //     project-dependent; surfaced in the closing "Next steps" list, settable
 //     later via `bun run setup --variables`.
 
 // Per-critical-var prompt context (grouped note shown before the prompt block).
 // Vars without an entry are prompted with just their name.
 const CRITICAL_VAR_NOTES: Record<string, { title: string, body: string }> = {
-  ATLASSIAN_URL: {
-    title: 'Atlassian site host (Jira / acli)',
-    body: 'e.g. https://your-org.atlassian.net\n'
-      + 'Stored in .agents/project.yaml (versioned), NOT in .env — it is project\n'
-      + 'identity, and a stale copy in .env silently pointed the sync scripts and\n'
-      + 'the Jira-Direct TMS provider at a dead site. Read it back any time with\n'
-      + '`bun run --silent jira:url`.',
-  },
-  ATLASSIAN_EMAIL: {
-    title: 'Atlassian credentials (Jira / acli)',
-    body: 'Used by acli + scripts/sync-jira-*.ts. Get a token at: https://id.atlassian.com/manage-profile/security/api-tokens',
-  },
   RESEND_API_KEY: {
     title: 'Resend API key (email testing)',
     body: 'Used for email-flow tests (signup, password reset, magic links). Get a key: https://resend.com/api-keys — Docs: https://resend.com/docs/api-reference/introduction',
@@ -1255,43 +1212,6 @@ async function configureDayZeroCredentials(state: InstallState): Promise<void> {
   // ── CRITICAL tool credentials (idempotent, project-independent) ──────────
   for (const spec of criticalVars()) {
     const name = spec.name;
-
-    // A var sourced outside `.env` is asked for here like any other, but
-    // PERSISTED to its own home. ATLASSIAN_URL goes to `.agents/project.yaml`:
-    // it is a public hostname and project identity, and while it lived in `.env`
-    // a stale copy inherited from the parent shell shadowed the file in silence.
-    if (valueSourceOf(spec) === 'atlassian-instance') {
-      let existing: string | null = null;
-      try { existing = resolveAtlassianInstance().baseUrl; }
-      catch { existing = null; }
-
-      if (existing !== null) {
-        log.dim(`  ${name}: already set (${existing}).`);
-        continue;
-      }
-      if (NON_INTERACTIVE) {
-        log.warn(
-          `${name}: the Atlassian host is not set in .agents/project.yaml and non-interactive mode `
-          + 'cannot prompt. Jira steps will be skipped — fix with `bun run agents:setup`.',
-        );
-        continue;
-      }
-      const noteInfo = CRITICAL_VAR_NOTES[name];
-      if (noteInfo) { tui.note(noteInfo.body, noteInfo.title); }
-      const value = await promptForVar(name);
-      if (value.length === 0) {
-        log.warn('  Atlassian host left empty — Jira steps will be skipped. Set it later with `bun run agents:setup`.');
-        continue;
-      }
-      try {
-        const written = writeAtlassianUrlToYaml(value);
-        log.dim(`  ${name} → .agents/project.yaml (${written}).`);
-      }
-      catch (err) {
-        log.warn(`  Could not write the Atlassian host: ${(err as Error).message}`);
-      }
-      continue;
-    }
 
     const fromFile = (envValues[name] ?? '').trim();
     const fromProcess = (process.env[name] ?? '').trim();
@@ -1746,22 +1666,6 @@ function verifyExternalClis(state: InstallState): CliResult[] {
   ]);
   process.stdout.write(`${tui.table(['CLI', 'Found', 'Install hint', 'Purpose'], rows)}\n`);
 
-  // Hard-abort when any `required: true` CLI is missing. Escape hatch:
-  // `INSTALL_SKIP_JIRA=1` downgrades the requirement (for non-Jira projects).
-  if (!SKIP_JIRA) {
-    const missingRequired = EXTERNAL_CLIS.filter(
-      cli => cli.required === true && state.externalClis[cli.name] !== 'found',
-    );
-    for (const cli of missingRequired) {
-      process.stdout.write(`\n${tui.statusIcon('fail')} ${cli.name} is required for Jira/Confluence integration but was not found on PATH.\n`);
-      process.stdout.write(`    Install via: ${cli.docs}\n`);
-      process.stdout.write('    Then re-run: bun run setup\n');
-    }
-    if (missingRequired.length > 0) {
-      process.exit(1);
-    }
-  }
-
   return results;
 }
 
@@ -1784,13 +1688,7 @@ async function loadPriorState(): Promise<InstallState | null> {
     // Back-fill postInstall for state files written before this field existed.
     parsed.postInstall ??= {
       agentsSetup: 'pending',
-      acliAuth: 'pending',
-      jiraSyncFields: 'pending',
-      jiraSyncWorkflows: 'pending',
-      jiraCheck: 'pending',
     };
-    parsed.postInstall.acliAuth ??= 'pending';
-    parsed.postInstall.jiraSyncWorkflows ??= 'pending';
     return parsed;
   }
   catch {
@@ -1811,13 +1709,7 @@ export function buildInitialState(prior: InstallState | null): InstallState {
     prior.steps ??= {};
     prior.postInstall ??= {
       agentsSetup: 'pending',
-      acliAuth: 'pending',
-      jiraSyncFields: 'pending',
-      jiraSyncWorkflows: 'pending',
-      jiraCheck: 'pending',
     };
-    prior.postInstall.acliAuth ??= 'pending';
-    prior.postInstall.jiraSyncWorkflows ??= 'pending';
 
     // Migrate legacy step booleans into the new steps: Record<string, string> format.
     if (prior.legacySteps) {
@@ -1869,10 +1761,6 @@ export function buildInitialState(prior: InstallState | null): InstallState {
     pendingEnvVars: [],
     postInstall: {
       agentsSetup: 'pending',
-      acliAuth: 'pending',
-      jiraSyncFields: 'pending',
-      jiraSyncWorkflows: 'pending',
-      jiraCheck: 'pending',
     },
   };
 }
@@ -1934,8 +1822,7 @@ export function reloadDotEnv(): void {
       // inherited from whatever spawned this process (an agent session, a parent
       // shell) would otherwise shadow a corrected `.env` in silence and survive an
       // application restart. `bun run vars:env:check` guards the same class
-      // repo-wide; see `cli/lib/atlassian-instance.ts` for the incident this comes
-      // from. Only an EMPTY file value defers to an already-populated process value.
+      // repo-wide. Only an EMPTY file value defers to an already-populated process value.
       if (k && (v !== '' || !process.env[k])) { process.env[k] = v; }
     }
   }
@@ -1945,188 +1832,12 @@ export function reloadDotEnv(): void {
 }
 
 /**
- * Interactive loop that checks Atlassian access and probes /rest/api/3/myself.
- * The HOST comes from `.agents/project.yaml`; only ATLASSIAN_EMAIL /
- * ATLASSIAN_API_TOKEN are env vars.
- * Up to 5 attempts; lets the user skip at any time.
- */
-async function jiraAuthLoop(): Promise<'authenticated' | 'skipped'> {
-  const probe = async (): Promise<{ ok: boolean, reason: string }> => {
-    let url: string | null = null;
-    try { url = resolveAtlassianInstance().baseUrl; }
-    catch { url = null; }
-    const email = process.env.ATLASSIAN_EMAIL;
-    const token = process.env.ATLASSIAN_API_TOKEN;
-    const missing: string[] = [];
-    if (!url) { missing.push('issue_tracker.atlassian_url in .agents/project.yaml'); }
-    if (!email) { missing.push('ATLASSIAN_EMAIL'); }
-    if (!token) { missing.push('ATLASSIAN_API_TOKEN'); }
-    if (missing.length > 0) {
-      return { ok: false, reason: `Missing env vars: ${missing.join(', ')}` };
-    }
-    try {
-      const auth = Buffer.from(`${email}:${token}`).toString('base64');
-      const res = await fetch(`${url!.replace(/\/$/, '')}/rest/api/3/myself`, {
-        method: 'GET',
-        headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (res.ok) { return { ok: true, reason: 'authenticated' }; }
-      return {
-        ok: false,
-        reason: `HTTP ${res.status} from ${url}/rest/api/3/myself — check ATLASSIAN_EMAIL + ATLASSIAN_API_TOKEN`,
-      };
-    }
-    catch (err) {
-      return { ok: false, reason: `Network error: ${(err as Error).message}` };
-    }
-  };
-
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    const { ok, reason } = await probe();
-    if (ok) {
-      process.stdout.write(`${tui.statusIcon('ok')} Jira auth verified.\n`);
-      return 'authenticated';
-    }
-    process.stdout.write(`${tui.statusIcon('fail')} Jira auth failed: ${reason}\n`);
-
-    // Show actionable guidance once on first failure
-    if (attempt === 1) {
-      tui.note(
-        [
-          '1. Open .env in your editor.',
-          '2. Set the three Atlassian variables:',
-          '     (the SITE HOST is not a .env var — set it with `bun run agents:setup`)',
-          '     ATLASSIAN_EMAIL=your-email@example.com',
-          '     ATLASSIAN_API_TOKEN=...',
-          '     (Get a token at https://id.atlassian.com/manage-profile/security/api-tokens)',
-          '3. Save the file. dotenv auto-loads on the next probe — no shell reload needed.',
-        ].join('\n'),
-        'Fix Atlassian credentials',
-      );
-    }
-
-    const choice = await tui.select<'retry' | 'skip'>({
-      message: `Attempt ${attempt} / 5 — what now?`,
-      options: [
-        { value: 'retry', label: 'I fixed .env — retry' },
-        { value: 'skip', label: 'Skip Jira steps for now (re-run later with bun run jira:sync-fields)' },
-      ],
-    });
-    if (tui.isCancel(choice) || choice === 'skip') { return 'skipped'; }
-
-    // Re-load .env before next probe so edits the user just made are visible
-    reloadDotEnv();
-  }
-
-  process.stdout.write(`${tui.statusIcon('warn')} Max attempts reached — skipping Jira steps.\n`);
-  return 'skipped';
-}
-
-/**
- * Stderr marker emitted by `scripts/sync-jira-fields.ts` and
- * `scripts/sync-jira-workflows.ts` when the authenticated Jira user does not
- * have Administer permission. The script exits 0 in that case (lack of admin
- * is not a failure — the user can still use the repo with the boilerplate's
- * bundled JSON), so we rely on this marker to distinguish a true success from
- * a graceful skip.
- */
-const JIRA_SKIP_NO_ADMIN_MARKER = '[JIRA_SYNC_SKIPPED_NO_ADMIN]';
-
-/**
- * Run a Jira sync script while teeing its stderr through this process. Looks
- * for the `[JIRA_SYNC_SKIPPED_NO_ADMIN]` marker to detect the no-admin skip
- * path. Returns `'skipped-no-admin'` when the marker appears (exit code is
- * 0 in that case), `'completed'` on plain success, or `'failed'` on non-zero
- * exit without the marker.
- */
-function runJiraSyncCapturingMarker(
-  args: string[],
-): 'completed' | 'failed' | 'skipped-no-admin' {
-  const child = spawnSync('bun', args, {
-    stdio: ['inherit', 'inherit', 'pipe'],
-  });
-  const stderrText = child.stderr ? child.stderr.toString('utf8') : '';
-  if (stderrText) {
-    process.stderr.write(stderrText);
-  }
-  if (stderrText.includes(JIRA_SKIP_NO_ADMIN_MARKER)) {
-    return 'skipped-no-admin';
-  }
-  if (child.status === 0) {
-    return 'completed';
-  }
-  return 'failed';
-}
-
-/**
- * Print a one-line status for a Jira sync outcome. `own` adds a hint pointing
- * at the `--upex` fallback when the user's own-workspace sync was skipped for
- * lack of Administer permission.
- */
-function reportJiraOutcome(
-  label: string,
-  outcome: 'completed' | 'failed' | 'skipped-no-admin',
-  own = false,
-): void {
-  if (outcome === 'completed') {
-    process.stdout.write(`${tui.statusIcon('ok')} ${label} completed\n`);
-  }
-  else if (outcome === 'skipped-no-admin') {
-    process.stdout.write(`${tui.statusIcon('warn')} ${label} skipped — your Jira user is not an Administrator.\n`);
-    process.stdout.write('  The bundled .agents catalog stays as-is (repo still works).\n');
-    if (own) {
-      process.stdout.write('  Tip: re-run with the UPEX standard catalog, e.g. bun run jira:sync-fields --upex\n');
-    }
-  }
-  else {
-    process.stdout.write(`${tui.statusIcon('fail')} ${label} failed. Continuing.\n`);
-  }
-}
-
-/**
- * Jira catalog JSON files referenced by SKILL.md bodies. The lint-skills
- * STALE-PATH check (ERROR severity) fails repo:check / the pre-push hook when
- * any of these is missing on disk. The bootstrap scaffolder
- * (packages/create-agentic-qa) deletes jira-fields.json + jira-workflows.json
- * so a fresh project never inherits UPEX's cached catalogs — which leaves the
- * SKILL.md path references dangling until the user runs a sync.
- */
-const JIRA_CATALOG_PLACEHOLDERS = [
-  '.agents/jira-fields.json',
-  '.agents/jira-workflows.json',
-  '.agents/jira-link-types.json',
-] as const;
-
-/**
- * Write an empty `{}` placeholder for any Jira catalog still missing on disk
- * after the sync phase (skip, no-auth, no-admin, or a failed fetch). This:
- *   - satisfies the STALE-PATH lint check (the file now exists), and
- *   - is treated as "not yet populated" by sync-jira-*.ts, which only refuse to
- *     overwrite a file that is NOT the empty `{}` placeholder — so a later
- *     `bun run jira:sync-*` populates it cleanly without needing --force.
- */
-async function ensureJiraCatalogPlaceholders(): Promise<void> {
-  for (const rel of JIRA_CATALOG_PLACEHOLDERS) {
-    const abs = join(REPO_ROOT, rel);
-    if (!existsSync(abs)) {
-      await writeFile(abs, '{}\n', 'utf8');
-      process.stdout.write(`${tui.statusIcon('ok')} Wrote empty placeholder ${rel} (run jira:sync-* to populate).\n`);
-    }
-  }
-}
-
-/**
  * PHASE 5 — INITIAL CONFIGURATION
  *
  * Steps:
  *   7-agents-setup        bun run agents:setup (.agents/project.yaml)
- *   12.4-acli-auth        Atlassian credentials + acli session login
- *   13-jira-sync          catalog-source prompt → fields + workflows + link
- *                         types sync (own/upex/skip) + {} placeholder safety net
- *   14-jira-check         bun run jira:check
  *
- * NON_INTERACTIVE skips this entire phase cleanly — each step is marked
+ * NON_INTERACTIVE skips this phase cleanly — the step is marked
  * 'skipped-non-interactive' in state.postInstall.
  */
 async function runInitialConfigurationPhase(state: InstallState): Promise<void> {
@@ -2165,262 +1876,6 @@ async function runInitialConfigurationPhase(state: InstallState): Promise<void> 
       else {
         process.stdout.write(`${tui.statusIcon('fail')} agents:setup exited with ${res.status}. Continuing.\n`);
       }
-    }
-  }
-
-  // ── Step 12.4: Atlassian credentials & acli authentication ──────────────
-  tui.section('Step 12.4: Atlassian credentials & acli authentication');
-
-  // Recovery instruction printed whenever acli auth cannot complete. The command
-  // syntax differs per shell, so pick the form that matches the platform. The
-  // site is read from `.agents/project.yaml` via `jira:url --slug`: `--site`
-  // wants the BARE host, and the old hint interpolated an env var that both
-  // carried a scheme acli rejects and no longer exists.
-  const MANUAL_ACLI_LOGIN = process.platform === 'win32'
-    ? '$env:ATLASSIAN_API_TOKEN | acli jira auth login --site (bun run --silent jira:url --slug) --email $env:ATLASSIAN_EMAIL --token'
-    : 'echo "$ATLASSIAN_API_TOKEN" | acli jira auth login --site "$(bun run --silent jira:url --slug)" --email "$ATLASSIAN_EMAIL" --token';
-
-  if (state.postInstall.acliAuth === 'completed') {
-    process.stdout.write(`${tui.statusIcon('ok')} acli already authenticated in a prior run.\n`);
-  }
-  else if (SKIP_JIRA) {
-    state.postInstall.acliAuth = 'skipped-non-interactive';
-    log.dim('  INSTALL_SKIP_JIRA=1, skipping acli authentication.');
-  }
-  else if (AUTO_NON_INTERACTIVE) {
-    // Step 10b never prompted for the ATLASSIAN_* credentials (no TTY), so
-    // there is nothing to authenticate with. Skip like every other Phase-5
-    // step instead of aborting — a no-TTY run is normal in Git Bash on
-    // Windows, whose MSYS pty is a named pipe and reports isTTY false.
-    state.postInstall.acliAuth = 'skipped-non-interactive';
-    process.stdout.write(`${tui.statusIcon('warn')} Skipped (no TTY). Set the host with \`bun run agents:setup\` and ATLASSIAN_EMAIL / ATLASSIAN_API_TOKEN in .env, then re-run: bun run setup\n`);
-  }
-  else {
-    // ATLASSIAN_* credentials were collected during Step 10b (day-0 creds).
-    // Here we only verify they're present and run the acli auth.
-    const ATLASSIAN_VARS = ['ATLASSIAN_EMAIL', 'ATLASSIAN_API_TOKEN'] as const;
-    const stillMissing: string[] = ATLASSIAN_VARS.filter(
-      v => !(process.env[v] && process.env[v].trim().length > 0),
-    );
-    // The host is NOT an env var — it comes from `.agents/project.yaml`.
-    // `--site` wants the BARE host: passing the yaml value verbatim would hand
-    // acli a scheme (and possibly a trailing slash) that it rejects.
-    let site = '';
-    try { site = toSiteSlug(resolveAtlassianInstance().baseUrl); }
-    catch { stillMissing.unshift('issue_tracker.atlassian_url (.agents/project.yaml)'); }
-    const email = process.env.ATLASSIAN_EMAIL ?? '';
-
-    if (stillMissing.length > 0) {
-      // Jira auth is not a prerequisite for Steps 13-14, so record the gap and
-      // let Phase 5 finish writing its catalogs rather than aborting the run.
-      state.postInstall.acliAuth = 'skipped-non-interactive';
-      process.stdout.write(`${tui.statusIcon('warn')} Cannot run acli auth — still missing: ${stillMissing.join(', ')}\n`);
-      process.stdout.write('    Set the host with `bun run agents:setup`, the credentials in .env, then re-run `bun run setup` — or run manually:\n');
-      process.stdout.write(`    ${MANUAL_ACLI_LOGIN}\n`);
-      await writeInstallState(state);
-    }
-    // Probe existing session: a read-only Jira search returns exit 0 if a session exists.
-    else if (spawnSync('acli', ['jira', 'workitem', 'search', '--jql', 'created >= -1d', '--limit', '1', '--json'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 8000,
-    }).status === 0) {
-      state.postInstall.acliAuth = 'completed';
-      process.stdout.write(`${tui.statusIcon('ok')} acli already authenticated (existing session detected).\n`);
-    }
-    else {
-      // No session — run the login. Pipe the token via spawnSync `input` to
-      // avoid shell injection risks (no `echo $TOKEN | ...` expansion).
-      let token = process.env.ATLASSIAN_API_TOKEN ?? '';
-
-      const MAX_ATTEMPTS = 3;
-      let success = false;
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        const loginRes = spawnSync(
-          'acli',
-          ['jira', 'auth', 'login', '--site', site, '--email', email, '--token'],
-          {
-            input: token,
-            stdio: ['pipe', 'inherit', 'inherit'],
-            timeout: 15000,
-          },
-        );
-        if (loginRes.status === 0) {
-          state.postInstall.acliAuth = 'completed';
-          process.stdout.write(`${tui.statusIcon('ok')} acli session created. Subsequent acli commands won't need re-auth.\n`);
-          success = true;
-          break;
-        }
-
-        process.stdout.write(`${tui.statusIcon('fail')} acli auth login failed (attempt ${attempt}/${MAX_ATTEMPTS}, exit ${loginRes.status}).\n`);
-        if (attempt < MAX_ATTEMPTS) {
-          if (AUTO_NON_INTERACTIVE) {
-            // Can't re-prompt without a TTY — break out of the retry loop.
-            break;
-          }
-          const retryToken = await promptForVar('ATLASSIAN_API_TOKEN');
-          if (retryToken.length === 0) { break; }
-          token = retryToken;
-          process.env.ATLASSIAN_API_TOKEN = retryToken;
-          await appendVarsToEnv({ ATLASSIAN_API_TOKEN: retryToken });
-          reloadDotEnv();
-        }
-      }
-
-      if (!success) {
-        // Record the failure and carry on: Steps 13-14 write the catalog
-        // placeholders the skills reference, and the closing summary reports
-        // acliAuth: failed. Aborting here left every re-run stuck at 12.4.
-        state.postInstall.acliAuth = 'failed';
-        process.stdout.write(`${tui.statusIcon('fail')} acli auth login failed after ${MAX_ATTEMPTS} attempts.\n`);
-        process.stdout.write(`    Manual auth: ${MANUAL_ACLI_LOGIN}\n`);
-        await writeInstallState(state);
-      }
-    }
-  }
-
-  // ── Step 13: Jira catalogs sync (fields + workflows + link types) ─────────
-  // One prompt picks the catalog source for the whole project:
-  //   own  → live-fetch from the user's Atlassian site (needs admin)
-  //   upex → download the UPEX-Galaxy standard catalogs from GitHub (no admin)
-  //   skip → leave empty {} placeholders, configure later
-  // Whatever the outcome, ensureJiraCatalogPlaceholders() below guarantees the
-  // SKILL.md-referenced JSON files exist so the STALE-PATH lint never breaks
-  // the pre-push hook on a freshly bootstrapped project.
-  tui.section('Step 13: Jira catalogs sync (fields + workflows + link types)');
-
-  const jiraAlreadyDone
-    = state.postInstall.jiraSyncFields === 'completed'
-      && state.postInstall.jiraSyncWorkflows === 'completed';
-
-  if (SKIP_JIRA) {
-    log.dim('  INSTALL_SKIP_JIRA=1, skipping Jira catalog sync.');
-    state.postInstall.jiraSyncFields = 'skipped-non-interactive';
-    state.postInstall.jiraSyncWorkflows = 'skipped-non-interactive';
-  }
-  else if (jiraAlreadyDone) {
-    process.stdout.write(`${tui.statusIcon('ok')} Already completed in a prior run.\n`);
-  }
-  else if (AUTO_NON_INTERACTIVE) {
-    state.postInstall.jiraSyncFields = 'skipped-non-interactive';
-    state.postInstall.jiraSyncWorkflows = 'skipped-non-interactive';
-    process.stdout.write(`${tui.statusIcon('warn')} Skipped (no TTY). Re-run via: bun run jira:sync-fields && bun run jira:sync-workflows\n`);
-  }
-  else {
-    const mode = await tui.select<'own' | 'upex' | 'skip'>({
-      message: 'Jira catalogs (custom fields, workflows, link types) — which source?',
-      options: [
-        {
-          value: 'own',
-          label: 'My own Jira workspace — live-fetch from your Atlassian site (needs Administer permission)',
-        },
-        {
-          value: 'upex',
-          label: 'UPEX-Galaxy standard — download the reference catalogs from GitHub (no admin needed)',
-        },
-        {
-          value: 'skip',
-          label: 'Skip for now — write empty {} placeholders, configure later',
-        },
-      ],
-    });
-
-    if (tui.isCancel(mode) || mode === 'skip') {
-      state.postInstall.jiraSyncFields = 'skipped-no-auth';
-      state.postInstall.jiraSyncWorkflows = 'skipped-no-auth';
-      process.stdout.write(`${tui.statusIcon('warn')} Skipped by user. Re-run later: bun run jira:sync-fields (add --upex for the UPEX standard).\n`);
-    }
-    else if (mode === 'upex') {
-      // --upex short-circuits the Jira API entirely (downloads the cached
-      // UPEX-standard catalogs from GitHub raw), so no auth loop is needed.
-      // --force overwrites the bootstrap-pruned/stale copy unconditionally.
-      const fOut = runJiraSyncCapturingMarker(['run', 'jira:sync-fields', '--', '--upex', '--force']);
-      state.postInstall.jiraSyncFields = fOut;
-      reportJiraOutcome('jira:sync-fields --upex', fOut);
-
-      const wOut = runJiraSyncCapturingMarker(['run', 'jira:sync-workflows', '--', '--upex', '--force']);
-      state.postInstall.jiraSyncWorkflows = wOut;
-      reportJiraOutcome('jira:sync-workflows --upex', wOut);
-
-      // link-types is USER-OK (no admin) and not bootstrap-pruned, but we sync
-      // it here too so 'upex' means the full standard. It has no --force flag;
-      // --upex already overwrites with the upstream catalog.
-      const lOut = runJiraSyncCapturingMarker(['run', 'jira:sync-link-types', '--', '--upex']);
-      reportJiraOutcome('jira:sync-link-types --upex', lOut);
-    }
-    else {
-      // mode === 'own' — live-fetch from the user's Atlassian site. --force is
-      // always passed during setup so a stale bootstrap copy is refreshed; the
-      // script's own populated-file guard protects user edits in later sessions
-      // (this branch only runs while state is not yet 'completed').
-      const authResult = await jiraAuthLoop();
-      if (authResult === 'skipped') {
-        state.postInstall.jiraSyncFields = 'skipped-no-auth';
-        state.postInstall.jiraSyncWorkflows = 'skipped-no-auth';
-        process.stdout.write(`${tui.statusIcon('warn')} Skipped by user. Re-run via: bun run jira:sync-fields (or --upex for the UPEX standard).\n`);
-      }
-      else {
-        const fOut = runJiraSyncCapturingMarker(['run', 'jira:sync-fields', '--', '--force']);
-        state.postInstall.jiraSyncFields = fOut;
-        reportJiraOutcome('jira:sync-fields', fOut, true);
-
-        if (fOut === 'skipped-no-admin') {
-          // Same root cause (no Administer permission) applies to workflows.
-          state.postInstall.jiraSyncWorkflows = 'skipped-no-admin';
-          process.stdout.write(`${tui.statusIcon('warn')} jira:sync-workflows skipped — same no-admin reason.\n`);
-          process.stdout.write('  Tip: re-run with the UPEX standard: bun run jira:sync-workflows --upex\n');
-        }
-        else if (fOut !== 'completed') {
-          state.postInstall.jiraSyncWorkflows = 'skipped-no-auth';
-          process.stdout.write(`${tui.statusIcon('warn')} jira:sync-workflows skipped — jira:sync-fields did not complete (shared credentials).\n`);
-        }
-        else {
-          const wOut = runJiraSyncCapturingMarker(['run', 'jira:sync-workflows', '--', '--force']);
-          state.postInstall.jiraSyncWorkflows = wOut;
-          reportJiraOutcome('jira:sync-workflows', wOut, true);
-        }
-      }
-    }
-  }
-
-  // Safety net (anti STALE-PATH): every Jira catalog referenced by SKILL.md
-  // bodies must exist on disk or the lint-skills check fails the pre-push hook.
-  // Any path still missing after the sync phase gets an empty {} placeholder.
-  await ensureJiraCatalogPlaceholders();
-
-  // ── Step 14: Jira manifest check ─────────────────────────────────────────
-  tui.section('Step 14: Jira manifest check');
-
-  if (SKIP_JIRA) {
-    state.postInstall.jiraCheck = 'skipped-non-interactive';
-    log.dim('  INSTALL_SKIP_JIRA=1, skipping jira:check.');
-  }
-  else if (state.postInstall.jiraCheck === 'completed') {
-    process.stdout.write(`${tui.statusIcon('ok')} Already completed in a prior run.\n`);
-  }
-  else if (AUTO_NON_INTERACTIVE) {
-    state.postInstall.jiraCheck = 'skipped-non-interactive';
-    process.stdout.write(`${tui.statusIcon('warn')} Skipped (no TTY). Re-run via: bun run jira:check\n`);
-  }
-  else if (
-    state.postInstall.jiraSyncFields === 'skipped-no-admin'
-    || state.postInstall.jiraSyncWorkflows === 'skipped-no-admin'
-  ) {
-    state.postInstall.jiraCheck = 'skipped-prereq';
-    process.stdout.write(`${tui.statusIcon('warn')} Skipped — Jira sync was no-admin (boilerplate JSON in use). jira:check would compare against the upstream catalog, not yours.\n`);
-    process.stdout.write('  After downloading UPEX standard with `--upex`, you can run: bun run jira:check\n');
-  }
-  else if (state.postInstall.jiraSyncFields !== 'completed' || state.postInstall.jiraSyncWorkflows !== 'completed') {
-    state.postInstall.jiraCheck = 'skipped-prereq';
-    process.stdout.write(`${tui.statusIcon('warn')} Skipped — Jira sync prerequisites incomplete (need both fields + workflows). Re-run via: bun run jira:check\n`);
-  }
-  else {
-    const res = spawnSync('bun', ['run', 'jira:check'], { stdio: 'inherit' });
-    state.postInstall.jiraCheck = res.status === 0 ? 'completed' : 'failed';
-    if (res.status === 0) {
-      process.stdout.write(`${tui.statusIcon('ok')} jira:check completed\n`);
-    }
-    else {
-      process.stdout.write(`${tui.statusIcon('fail')} jira:check exited with ${res.status}. Continuing.\n`);
     }
   }
 }
@@ -2562,34 +2017,6 @@ function printClosingSummary(state: InstallState): void {
     stepNum++;
   }
 
-  if (state.postInstall.acliAuth !== 'completed') {
-    process.stdout.write(`${circled[stepNum]}  ${COLORS.bold}Authenticate acli (Atlassian CLI)${COLORS.reset}\n`);
-    process.stdout.write(`    ${COLORS.cyan}echo "$ATLASSIAN_API_TOKEN" | acli jira auth login --site "$(bun run --silent jira:url --slug)" --email "$ATLASSIAN_EMAIL" --token${COLORS.reset}\n`);
-    process.stdout.write(`    ${COLORS.dim}Writes a persistent session to ~/.config/acli/. The /acli skill needs this.${COLORS.reset}\n\n`);
-    stepNum++;
-  }
-
-  if (state.postInstall.jiraSyncFields !== 'completed') {
-    process.stdout.write(`${circled[stepNum]}  ${COLORS.bold}Sync Jira custom fields${COLORS.reset}\n`);
-    process.stdout.write(`    ${COLORS.cyan}bun run jira:sync-fields${COLORS.reset}\n`);
-    process.stdout.write(`    ${COLORS.dim}Caches your Jira workspace's custom field IDs. Required for /acli skill.${COLORS.reset}\n\n`);
-    stepNum++;
-  }
-
-  if (state.postInstall.jiraSyncWorkflows !== 'completed') {
-    process.stdout.write(`${circled[stepNum]}  ${COLORS.bold}Sync Jira workflows + statuses${COLORS.reset}\n`);
-    process.stdout.write(`    ${COLORS.cyan}bun run jira:sync-workflows${COLORS.reset}\n`);
-    process.stdout.write(`    ${COLORS.dim}Caches your Jira workspace's statuses + transitions. Required for /acli + skill prompts.${COLORS.reset}\n\n`);
-    stepNum++;
-  }
-
-  if (state.postInstall.jiraCheck !== 'completed') {
-    process.stdout.write(`${circled[stepNum]}  ${COLORS.bold}Validate Jira manifest${COLORS.reset}\n`);
-    process.stdout.write(`    ${COLORS.cyan}bun run jira:check${COLORS.reset}\n`);
-    process.stdout.write(`    ${COLORS.dim}Confirms .agents/jira-required.yaml matches your workspace.${COLORS.reset}\n\n`);
-    stepNum++;
-  }
-
   process.stdout.write(`${circled[stepNum]}  ${COLORS.bold}Open the agent${COLORS.reset}\n`);
   process.stdout.write(`    ${COLORS.cyan}bun claude${COLORS.reset}       ${COLORS.dim}(dotenv-cli loads .env)${COLORS.reset}\n`);
   process.stdout.write(`    ${COLORS.cyan}bun opencode${COLORS.reset}     ${COLORS.dim}(dotenv-cli loads .env)${COLORS.reset}\n`);
@@ -2634,8 +2061,6 @@ function printClosingSummary(state: InstallState): void {
 
   // Project metadata follow-ups (QA-specific)
   tui.section('Project metadata follow-ups');
-  process.stdout.write('  • Jira project key — edit `.agents/project.yaml` → `project.project_key`\n');
-  process.stdout.write('    Then run:  bun run jira:sync-fields && bun run jira:check\n\n');
   process.stdout.write('  • Bootstrap KATA manifest once:  bun run kata:manifest\n');
   process.stdout.write('    Validate:                       bun run kata:manifest:check\n\n');
   process.stdout.write('  • Adapt KATA to your stack:      /adapt-framework\n');
@@ -2651,7 +2076,6 @@ function printClosingSummary(state: InstallState): void {
   process.stdout.write(`  ${COLORS.bold}/test-documentation${COLORS.reset}      TMS docs + ROI scoring — Stage 4\n`);
   process.stdout.write(`  ${COLORS.bold}/test-automation${COLORS.reset}         Write KATA+Playwright automated tests — Stage 5\n`);
   process.stdout.write(`  ${COLORS.bold}/regression-testing${COLORS.reset}      Regression / GO-NO-GO — Stage 6\n`);
-  process.stdout.write(`  ${COLORS.bold}bun xray${COLORS.reset}                 Xray Cloud CLI (bun run xray --help for all commands)\n\n`);
 
   // Git strategy reminder — the project inherited the boilerplate's git_strategy block.
   tui.section('Git strategy');
@@ -3019,7 +2443,7 @@ async function main(): Promise<void> {
   await configureMcps(agents, state);
   await offerDirenvAutoload();
 
-  tui.section('Step 10b: Day-0 credentials (Atlassian, Resend, test users)');
+  tui.section('Step 10b: Day-0 credentials (Resend, test users)');
   await configureDayZeroCredentials(state);
 
   tui.section('Step 12: Optional API auth bootstrap');

@@ -1,3 +1,5 @@
+> NOTE (Trello remap): this project runs Trello + Google Drive, not Jira/Xray. The Jira mechanics below are remapped in docs/qa-standard/traceability-trello-drive.md — the principles carry over; the {{jira.*}} specifics do not apply here.
+
 # Artifact Lifecycle — which status every harness artifact lives in, who moves it, and what to do when the slug is missing
 
 > Shared doctrine cited by every workflow skill. Companion to `stage-gates.md` (what must

@@ -1,3 +1,5 @@
+> NOTE (Trello remap): this project runs Trello + Google Drive, not Jira/Xray. The Jira mechanics below are remapped in docs/qa-standard/traceability-trello-drive.md — the principles carry over; the {{jira.*}} specifics do not apply here.
+
 # Traceability Linking
 
 > **Purpose**: Reflect QA traceability relationships — Story↔test-artifact coverage, Story→Bug causation, Story→Bug blocking — as real Jira issue links, not just local declarations inside `story.md` / test-spec files. Local declarations document author intent; Jira links are the operational source of truth that audit trails, coverage reports, and the `defect_reported → blocked` gate read. Without this phase, the traceability graph exists only in the methodology docs and any consumer that walks `issuelinks` walks an empty graph.

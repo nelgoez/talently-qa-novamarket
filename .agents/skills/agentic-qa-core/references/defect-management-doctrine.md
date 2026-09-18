@@ -1,3 +1,5 @@
+> NOTE (Trello remap): this project runs Trello + Google Drive, not Jira/Xray. The Jira mechanics below are remapped in docs/qa-standard/traceability-trello-drive.md — the principles carry over; the {{jira.*}} specifics do not apply here.
+
 # Defect-Management Doctrine — classifying, reporting, and owning quality issues
 
 > **Canonical, shared doctrine.** Single source of truth for *how* a quality

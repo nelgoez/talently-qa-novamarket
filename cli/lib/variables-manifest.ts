@@ -43,23 +43,9 @@ export type VarDestination = 'local' | 'github';
  * Where the tooling READS a variable's value from when it needs one.
  *
  * - `env-file` (the default) — the value lives in `.env`. True for every var
- *   with a `local` destination, which is almost all of them.
- * - `atlassian-instance` — resolved by `cli/lib/atlassian-instance.ts` from
- *   `.agents/project.yaml` -> `issue_tracker.atlassian_url`.
- *
- * The second case exists because `ATLASSIAN_URL` is deliberately NOT a local
- * variable: while it sat in `.env`, a stale copy in the process environment
- * shadowed the corrected file (both `bun`'s autoload and `dotenv-cli` skip a
- * var that is already set), and `jira:sync-issues` silently rebuilt the PBI
- * cache from a dead Jira site with exit code 0. The host is project identity,
- * so it is anchored to a versioned file that shows up in a diff.
- *
- * The NAME keeps a `github` destination because a CI step or third-party action
- * may still want the variable in its environment. Its value is pushed there FROM
- * the yaml, so the two cannot drift. The repo's own test runtime does not rely on
- * that: `config/variables.ts` resolves the host through the same resolver.
+ *   with a `local` destination.
  */
-export type VarValueSource = 'env-file' | 'atlassian-instance';
+export type VarValueSource = 'env-file';
 
 /**
  * A conditional-required clause: the var is required only when another env var

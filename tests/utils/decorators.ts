@@ -11,7 +11,6 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 import { test } from '@playwright/test';
-import { config } from '@variables';
 import * as allure from 'allure-js-commons';
 
 import { ContentType } from 'allure-js-commons';
@@ -130,11 +129,6 @@ export function atc(testId: string, options: AtcOptions = {}) {
 
         if (options.severity !== undefined) {
           allure.severity(options.severity);
-        }
-
-        // Link to Jira test case
-        if (config.tms.jira.url !== '') {
-          allure.link(`${config.tms.jira.url}/browse/${testId}`, testId, 'tms');
         }
       }
       catch {
