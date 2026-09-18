@@ -15,7 +15,7 @@
  */
 
 import { existsSync, watch } from 'node:fs';
-import { basename, join, relative } from 'node:path';
+import { basename, join, relative, sep } from 'node:path';
 
 // ============================================================================
 // Types
@@ -244,7 +244,7 @@ async function generateManifest(): Promise<KataManifest> {
     const component: ComponentInfo = {
       name: await extractClassName(file),
       file: basename(file),
-      relativePath: relative(PROJECT_ROOT, file),
+      relativePath: relative(PROJECT_ROOT, file).split(sep).join('/'),
       atcs,
     };
     manifest.components.api.push(component);
@@ -258,7 +258,7 @@ async function generateManifest(): Promise<KataManifest> {
     const component: ComponentInfo = {
       name: await extractClassName(file),
       file: basename(file),
-      relativePath: relative(PROJECT_ROOT, file),
+      relativePath: relative(PROJECT_ROOT, file).split(sep).join('/'),
       atcs,
     };
     manifest.components.ui.push(component);
@@ -271,7 +271,7 @@ async function generateManifest(): Promise<KataManifest> {
     const steps: StepsInfo = {
       name: await extractClassName(file),
       file: basename(file),
-      relativePath: relative(PROJECT_ROOT, file),
+      relativePath: relative(PROJECT_ROOT, file).split(sep).join('/'),
       methods: await extractStepsMethods(file),
     };
     manifest.steps.push(steps);
