@@ -1,5 +1,10 @@
 # Handoff — Drive wiring, env cleanup, next workstreams (2026-09-18)
 
+> **SUPERSEDED** by `docs/handoff-2026-09-18-trello-build-and-jira-removal.md`. Its
+> workstreams are now done: the commit batch landed, Discord was sent, Trello parity was
+> built, and the Jira executable paths were removed. Kept for history only — read the new
+> handoff for the current open items.
+
 > Resume point for the next session. Supersedes the deleted
 > `handoff-2026-09-18-trello-drive-migration.md`. One line of truth: **Trello is the issue
 > tracker, Drive holds the traceability artifacts, and the Jira/Xray/Atlassian machinery is

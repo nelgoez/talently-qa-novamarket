@@ -1,10 +1,9 @@
 # Trello Tooling Parity — Workstream Plan
 
-> Status: **scoped, not started.** Companion to the deferred Jira-removal pass (the
-> handoff's Workstream B). This plan is the _build the Trello side_ half; the _remove
-> the Jira side_ half (closing `cli/lib/atlassian-instance.ts`, `install.ts`, `config.tms`,
-> CI `xray`, the ~457 `{{jira.*}}` refs) stays its own pass. The two are interdependent —
-> batch commits per workstream, in the order below.
+> Status: **built (2026-09-18).** Both halves shipped: the Trello side (Phases 1-3) and the
+> Jira-removal pass (Phase 4, functional removal). Remaining: the deferred full
+> `{{jira.*}}` prose rewrite and the board/label rename (PO/EM call). Current open items:
+> `docs/handoff-2026-09-18-trello-build-and-jira-removal.md`.
 
 ## Goal
 
