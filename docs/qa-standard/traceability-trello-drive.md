@@ -103,7 +103,7 @@ is ambiguous about "where do ACs go" or "where does the test matrix go".
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | Acceptance criteria (ACs)                         | **Card checklist** (one item per AC)                                                           | The checklist IS the AC source of truth for the card. A card with no checklist = ACs not yet defined. |
 | Test cases (TCs)                                  | **Card checklist items under a `## Tests` divider**, or a linked Drive doc when there are >~10 | A checklist item is a _manual_ test; its checkbox = pass/fail at a glance.                            |
-| Feature → test mapping                            | **Google Drive doc** (one matrix per feature/area)                                             | The traceability spine (§3). Trello has no coverage panel; the Drive doc replaces it.                 |
+| Feature → test mapping                            | **Google Sheet** (one matrix per feature/area)                                                 | The traceability spine (§3). Trello has no coverage panel; the Sheet replaces it.                     |
 | Test evidence (screenshots, logs)                 | **Card attachments**                                                                           | Named per the evidence rule (§4).                                                                     |
 | Test plan (ATP / "qué voy a probar")              | **Card description section `## Test Plan`**                                                    | One per card, in Spanish.                                                                             |
 | Test results (ATR / "qué pasó")                   | **Card comment** `## Test Results — <date>`                                                    | Append-only progress, like the boilerplate's STP convention.                                          |
@@ -118,7 +118,7 @@ cover every AC" checkable by a human and a script.
 ## 3. The traceability spine: feature ↔ test
 
 This is the part that answers "which test covers which feature?" and it is the one that Trello
-cannot do natively. The spine is a **Drive matrix**, one row per test case, one column per link:
+cannot do natively. The spine is a **Google Sheet matrix**, one row per test case, one column per link:
 
 ```
 Feature / Historia  ->  Card  ->  AC  ->  Test case  ->  Env  ->  Result  ->  Evidence
@@ -136,7 +136,7 @@ A concrete matrix row (Spanish content, English headers):
    and the Trello card point at each other by an identifier a human can predict.
 2. **The `AC` column references the checklist item id** (AC-1, AC-2, …) on that card — not a
    paraphrase. A paraphrased AC drifts from the real AC the moment the card is edited.
-3. **The matrix lives in Drive, one doc per feature/area**, linked from the feature's card
+3. **The matrix lives in Drive, one Google Sheet per feature/area**, linked from the feature's card
    description under a `## Test Matrix` line. The repo references it by URL, never copies it.
 4. **A test with no `Card` slug is an orphan** — the same smell the boilerplate's
    `epics/_orphans/` exists to surface. Orphan tests are a coverage gap, not a defect, but they
@@ -154,13 +154,13 @@ Carried over from the boilerplate's ratified `docs/qa-standard/naming-gaps-backl
 for Trello/Drive. Only the rules this project actually touches now are listed; the rest stay in the
 boilerplate doc until a need surfaces.
 
-| Thing                                      | Convention                                                                     | Example                                    |
-| ------------------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------ |
-| Evidence / screenshot                      | `{CARD-SLUG}-step{NN}-{action}.png`                                            | `QA-9-step3-error-shown.png`               |
-| Test-data file                             | `{resource}-{variant}.json`                                                    | `users-valid.json`, `orders-boundary.json` |
-| Env identifier                             | `local` · `dev` · `qa` · `staging` · `production` (lowercase, no abbreviation) | `dev`                                      |
-| Drive doc title                            | `{AREA} {title}` (no hand number; Drive revision = version)                    | `QA Matriz de pruebas`                     |
-| Test module folder (when automation lands) | `{domain-plural}/` kebab-case                                                  | `orders/`, `user-management/`              |
+| Thing                                      | Convention                                                                                                                 | Example                                    |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Evidence / screenshot                      | `{CARD-SLUG}-step{NN}-{action}.png`                                                                                        | `QA-9-step3-error-shown.png`               |
+| Test-data file                             | `{resource}-{variant}.json`                                                                                                | `users-valid.json`, `orders-boundary.json` |
+| Env identifier                             | `local` · `dev` · `qa` · `staging` · `production` (lowercase, no abbreviation)                                             | `dev`                                      |
+| Drive doc title                            | `NovaMarket_{SLUG}_{TYPE}_v{version}` (slug = `{LABEL}-{trello-number}`; Drive revision = edits, `v` = released milestone) | `NovaMarket_QA-9_MatrizDePruebas_v0.1`     |
+| Test module folder (when automation lands) | `{domain-plural}/` kebab-case                                                                                              | `orders/`, `user-management/`              |
 
 ---
 
@@ -201,3 +201,11 @@ boilerplate doc until a need surfaces.
   Trello **label** (normalized casing), the title carries a bare Spanish verb phrase, and the card
   slug is `{LABEL}-{trello-number}` (`QA-9`), not a hand-assigned `-NNN`. Renaming existing cards
   and normalizing labels is a PO / EM decision, out of QA's scope to execute unilaterally.
+- **2026-09-18 — Drive wiring done (QA-9)** — matrix published as a **Google Sheet**
+  (`NovaMarket_QA-9_MatrizDePruebas_v0.1`), proposal as a **Google Doc**
+  (`NovaMarket_QA-9_PropuestaAC_v0.1`), both under `/QA`, both linked bidirectionally from the card
+  description. Access is via `rclone` (`gdrive` remote).
+- **2026-09-18 — format + naming ratified** — matrix = Google Sheet, prose = Google Doc, snapshot =
+  PDF, `.md` = git-only; Drive file names follow `NovaMarket_{SLUG}_{TYPE}_v{version}`. The rclone
+  shared `client_id` is rate-limited and retiring — own `client_id` is a tracked open action (see
+  `docs/qa-standard/tool-platform-integration.md` §2.1).

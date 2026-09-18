@@ -43,6 +43,24 @@ The deferred **framework-adaptation pass** — removing Jira from the _shared_ l
 
 **Recommended entry point**: `/framework-development` for the framework pass, or `/sprint-testing` for per-ticket QA on the Trello board.
 
+## Drive wiring follow-up (same session)
+
+Drive access now works via `rclone` (`gdrive` remote, OAuth). `QA-9` is wired: matrix = Google Sheet
+`NovaMarket_QA-9_MatrizDePruebas_v0.1`, proposal = Google Doc `NovaMarket_QA-9_PropuestaAC_v0.1`,
+both under `/QA` and linked bidirectionally from the card. Canonical docs:
+`docs/qa-standard/tool-platform-integration.md` (the playbook) + `docs/qa-standard/traceability-trello-drive.md`
+(ratified). Open items:
+
+1. **Rate limit — long-term fix (owner action).** The rclone shared `client_id` is throttled
+   (403 `Quota exceeded`) and retired in 2026. Create a Google Cloud OAuth client (Desktop app),
+   wire `client_id`/`client_secret` into `gdrive`, re-authorize. Steps + the service-account
+   caveat (not viable: `NOVAMARKET` is "shared with me") in the playbook §2.1.
+2. **Two pending renames** — blocked by the same rate limit. Rename in Drive UI:
+   `Matriz de pruebas - QA-9` → `NovaMarket_QA-9_MatrizDePruebas_v0.1`;
+   `Propuesta AC y Matriz de Pruebas - v0.1` → `NovaMarket_QA-9_PropuestaAC_v0.1`.
+3. **Future tasks (team):** a minimal QA-Update post to the team's Discord; and research whether
+   Discord can be wired into this repo (webhook/MCP) to automate that update.
+
 ## Verification (all green at commit `363f9ea`)
 
 `format:check` · `lint:check` · `types:check` · `vars:check` · `skills:check` · `skills:registry:check` · `agents:compat:check` · `vars:env:check`
