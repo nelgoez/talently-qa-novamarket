@@ -10,12 +10,12 @@ project:
   webapp_domain: myproject.com # Domain of the web application under test (e.g. myproject.com)
 
 backend:
-  backend_repo: /backend # Relative path to backend repository (e.g. ../my-backend)
+  backend_repo: ../S2621-novamarket/backend # Relative path to the sibling product repo (e.g. ../my-backend)
   backend_stack: Node.JS, Express.JS, Postgre SQL, JWT, Postman, github, Railway # Backend technology stack (e.g. Node.js + Express)
   backend_entry: src/ # Backend source entry point (e.g. src/)
 
 frontend:
-  frontend_repo: /frontend # Relative path to frontend repository (e.g. ../my-frontend)
+  frontend_repo: ../S2621-novamarket/frontend # Relative path to the sibling product repo (e.g. ../my-frontend)
   frontend_stack: React, Vite, Tailwind, React Router DOM, Axios, Context API # Frontend technology stack (e.g. React + TypeScript)
   frontend_entry: src/ # Frontend source entry point (e.g. src/)
 
