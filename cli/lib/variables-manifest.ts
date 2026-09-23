@@ -211,6 +211,17 @@ export const VAR_MANIFEST: VarSpec[] = [
     note: 'CI-only Slack webhook for notifications. Absent from .env.example historically; GitHub-only secret.',
   },
 
+  // --- Discord (manual QA notifier + future CI) ---
+  {
+    name: 'DISCORD_WEBHOOK_URL',
+    destinations: ['local', 'github'],
+    secret: true,
+    required: false,
+    critical: false,
+    obtainHint: 'Discord → Server Settings → Integrations → Webhooks → Create Webhook.',
+    note: 'Discord incoming webhook for QA updates. Local (scripts/discord-post.ts) and optional CI notifications.',
+  },
+
   // --- LOCAL-ONLY set: no CI consumer; never pushed to GitHub ---
   // (GITHUB_TOKEN is deliberately NOT in this manifest — auto-injected by Actions.)
   {

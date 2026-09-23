@@ -12,6 +12,9 @@
   //     Critical Reminder about stopping immediately when MCP credentials fail.
   "$schema": "https://opencode.ai/config.json",
 
+  // Instructions - files pre-loaded as system context every session.
+  "instructions": [".opencode/instructions/graphify-context.md"],
+
   // Plugins:
   //   - @warp-dot-dev/opencode-warp: Warp terminal integration — surfaces
   //     OpenCode agent activity as native Warp notifications. Auto-installed
@@ -20,7 +23,7 @@
   //   - opencode-subagent-statusline: Cosmetic UX — shows the active subagent
   //     in the OpenCode status line so you can see which agent is running at
   //     a glance. Pure polish, no behavioral side effects.
-  "plugin": ["@warp-dot-dev/opencode-warp", "opencode-subagent-statusline"],
+  "plugin": ["@warp-dot-dev/opencode-warp", "opencode-subagent-statusline", ".opencode/plugins/graphify.js"],
 
   "mcp": {
     "context7": {

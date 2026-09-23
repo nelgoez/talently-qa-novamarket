@@ -44,6 +44,8 @@ export default antfu({
     // MCP reference templates — syntax-sensitive opt-in configs. Linting them
     // (e.g. toml/array-bracket-newline) corrupts the layout users copy from.
     'docs/mcp/**',
+    // Graphify knowledge graph output (auto-generated, regenerable)
+    'graphify-out/**',
   ],
 
   // Custom rules
