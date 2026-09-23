@@ -230,3 +230,7 @@ dbhub.local.toml
 
 # ===== Graphify (knowledge graph output — regenerable, never committed) =====
 graphify-out/
+
+# ===== Talently course context (local-only, pulled headless from the LMS) =====
+# Raw course material is Talently's IP; keep on disk for context, never commit.
+.context/course/
