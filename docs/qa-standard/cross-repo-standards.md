@@ -47,6 +47,20 @@ So the two are compatible: keep the local path for the agent, use `actions/check
 | Quality gates       | KATA manifest, `bun run repo:check` (tests → types → lint)          | husky pre-commit (lint-staged, eslint → prettier chained) · pre-push (`format:check → lint → build`, skipped when push doesn't touch `frontend/`) · GitHub Actions CI (`format:check → lint → build` on Node 20/22) |
 | Chat register       | caveman / PM Voice (this agent's own behavior, not a repo file)     | n/a (not a repo concern)                                                                                                                                                                                            |
 
+## Environments — `develop` is the QA env (S2 minute §2.1)
+
+Per the 22-Sep minute §2.1 ("Ambientes y estrategia de pruebas"):
+
+| Target-repo branch | Environment role                                                       |
+| ------------------ | ---------------------------------------------------------------------- |
+| `develop`          | **primary QA env** — most tests run here, with test data               |
+| `main`             | production (stable) + a **reduced E2E set**, with manually loaded data |
+| PR branch          | QA may download the branch and test it **before merge**                |
+
+There is **no `staging` branch** (kickoff: "se evaluó sumar un staging intermedio y se descartó por simplicidad"). The QA harness's canonical environment slot (`qa` / `staging` in `.agents/project.yaml` → `environments`) maps to `develop`; fill `environments.qa.web_url` / `api_url` with the deployed `develop` URLs once a deploy exists (none today).
+
+Every change or merge is announced on Discord so QA doesn't test a stale version (S2 §2.1).
+
 ## The ruling rule
 
 **When you land an artifact IN the target repo — commit, PR, branch, file — follow the TARGET repo's own conventions. The QA harness's `AGENTS.md` rules (forensic trailers, KATA, skills, caveman, PM Voice) govern the QA repo and the QA workflow, NOT the product repo's commit/PR surface.**
@@ -90,6 +104,36 @@ The target repo's quality posture, landed via PR #2 (`ci: quality gates`, rebase
 Install: `npm install` (root, activates husky) then `cd frontend && npm install`. Gates: `npm run format:check`, `npm run lint`, `npm run build`.
 
 Review suggestions applied (Daniel's review of PR #2): (1) lint-staged chained eslint→prettier, (2) pre-push skips non-`frontend/` pushes, (3) gate order format:check→lint→build mirrored in pre-push, (4) eslint-config-prettier kept; the Node 22/24 bump was reverted to 20.19+ to match team minute §2.2.
+
+## CI/CD gates — what the minutes actually define
+
+Gating PRs and branches comes from two minutes. Decided vs proposed vs still open:
+
+| Gate                                                                                                   | Source                  | Status                                                                       |
+| ------------------------------------------------------------------------------------------------------ | ----------------------- | ---------------------------------------------------------------------------- |
+| CI: ESLint + Prettier on every PR                                                                      | kickoff §3 (Leandro)    | ✅ landed as PR #2, grew to `format:check → lint → build` (`ci.yml`)         |
+| Git hooks (Husky) pre-commit/pre-push                                                                  | kickoff §3 (Nahuel)     | ✅ landed (PR #2)                                                            |
+| **Pruebas de sanidad (sanity)** — basic tests on the critical flows, run automatically in the pipeline | kickoff §3 (Nahuel, QA) | **proposed, scope pending** ("confirmar alcance según disponibilidad de QA") |
+| Reduced E2E set on `main` (manual data)                                                                | S2 §2.1                 | decided                                                                      |
+| Deploy (Railway + Docker + PostgreSQL)                                                                 | kickoff §2              | platform decided; no deploy workflow file yet                                |
+
+**Not in the minutes** (do not treat as decided): a standalone `build.yml` (build is folded into `ci.yml` today), a named `smoke.yml`, and unit tests (no `test` script or framework in `frontend/` yet). These are gaps to raise with the team, not settled agreements.
+
+**Sanity vs smoke** (for when the team defines them): a **smoke test** walks the critical path end-to-end against a deployed build; a **sanity test** is a narrow, fast subset confirming a specific change didn't break its own area. The kickoff's "pruebas de sanidad" is the sanity side; the reduced E2E on `main` (S2 §2.1) is the closest thing to smoke but is not named that.
+
+**What lives where (the split):** the product repo carries only the **fast gates** (lint/format, build, sanity). The **deep suite** — Playwright + KATA E2E/regression — runs from THIS QA harness repo against `develop` via `/regression-testing`, not from the product repo.
+
+## Gaps to raise with the team (proposal)
+
+Five open items stand between today's static gates (`ci.yml` + Husky) and the full test-gate ladder. For each, a one-line next step to confirm / correct / extend at the next meeting:
+
+| #   | Gap                                            | Proposed next step                                                                                                         | Owner (tentative)          |
+| --- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| 1   | Sanity scope (kickoff §3, pending)             | Fix a minimal sanity subset on the critical flows (login, catalog loads, add-to-cart), run automatically in the pipeline   | QA                         |
+| 2   | Smoke (not in the minutes)                     | Add `smoke.yml` on merge to `develop`/`main`: boot the deployed build, walk the critical path                              | QA + Front (depends on #5) |
+| 3   | Unit tests (no framework / `test` script)      | Adopt Vitest (Vite-native) in `frontend/`, add a `test` script and a `test.yml` gate                                       | Front                      |
+| 4   | `build.yml` (build folded into `ci.yml`)       | Keep build in `ci.yml`; split a dedicated `build.yml` only once the backend has its own build                              | low priority               |
+| 5   | Deploy workflow (Railway decided, no workflow) | Wire the Railway deploy (Leandro owns Docker/deploy) so `develop` gets a live URL — the trigger for #2 and QA's target env | Leandro                    |
 
 ## Planned: `agents.md` in the target repo (documented for the next PR)
 
