@@ -61,6 +61,14 @@ Cierre de semana — QA
    ejemplos del curso, marcados "pendiente wireframe/impl"; se validan cuando cada
    sprint aterrice. Así el 50+ queda documentado esta semana.
 
+Gates de CI/CD — gaps a cerrar:
+- Alcance de sanidad (kickoff §3): definir el subset mínimo sobre lo crítico y correrlo en el pipeline.
+- Smoke: agregar smoke.yml al mergear (boot del build + camino crítico). Depende del deploy.
+- Tests unitarios: adoptar Vitest en frontend/, agregar script test + gate test.yml.
+- build.yml: mantener el build en ci.yml; separar recién cuando backend tenga su build.
+- Deploy (Railway): cablear el deploy para que develop tenga URL viva (trigger de smoke + env de QA).
+Responsables tentativos: QA (sanidad) · QA+Front (smoke) · Front (unit) · Leandro (deploy).
+
 Próxima semana (Sprint 3 — catálogo y detalle):
 - Tomar "Pruebas de listado y datos" y "Pruebas de detalle y errores".
 - Dependencias: wireframes de listado/detalle (ya en Sprint 2) + endpoints de listado/detalle.
