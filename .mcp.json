@@ -51,6 +51,13 @@
       "headers": {
         "Authorization": "Bearer ${POSTMAN_API_KEY}"
       }
+    },
+    "mongodb": {
+      "command": "npx",
+      "args": ["-y", "mongodb-mcp-server@latest", "--readOnly"],
+      "env": {
+        "MDB_MCP_CONNECTION_STRING": "${MDB_MCP_CONNECTION_STRING}"
+      }
     }
   }
 }

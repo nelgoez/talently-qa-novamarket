@@ -11,7 +11,7 @@ project:
 
 backend:
   backend_repo: ../S2621-novamarket/backend # Relative path to the sibling product repo (e.g. ../my-backend)
-  backend_stack: Node.JS, Express.JS, Postgre SQL, JWT, Postman, github, Railway # Backend technology stack (e.g. Node.js + Express)
+  backend_stack: Node.JS, Express.JS, MongoDB, JWT, Postman, github, Railway # Backend technology stack (e.g. Node.js + Express)
   backend_entry: src/ # Backend source entry point (e.g. src/)
 
 frontend:
@@ -20,7 +20,7 @@ frontend:
   frontend_entry: src/ # Frontend source entry point (e.g. src/)
 
 database:
-  db_type: Postgre SQL # Database engine (e.g. PostgreSQL)
+  db_type: MongoDB # Ratified 2026-09-24 (minuta S2 §4.1 + contrato v0.3); BCK-001 closed
 
 issue_tracker:
   issue_tracker: Trello # Issue tracking tool (e.g. Jira)
