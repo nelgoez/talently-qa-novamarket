@@ -11,10 +11,10 @@
   //   - Missing env vars resolve to empty string (no hard failure) — see AGENTS.md
   //     Critical Reminder about stopping immediately when MCP credentials fail.
   "$schema": "https://opencode.ai/config.json",
-
   // Instructions - files pre-loaded as system context every session.
-  "instructions": [".opencode/instructions/graphify-context.md"],
-
+  "instructions": [
+    ".opencode/instructions/graphify-context.md"
+  ],
   // Plugins:
   //   - @warp-dot-dev/opencode-warp: Warp terminal integration — surfaces
   //     OpenCode agent activity as native Warp notifications. Auto-installed
@@ -23,18 +23,25 @@
   //   - opencode-subagent-statusline: Cosmetic UX — shows the active subagent
   //     in the OpenCode status line so you can see which agent is running at
   //     a glance. Pure polish, no behavioral side effects.
-  "plugin": ["@warp-dot-dev/opencode-warp", "opencode-subagent-statusline", ".opencode/plugins/graphify.js"],
-
+  "plugin": [
+    "@warp-dot-dev/opencode-warp",
+    "opencode-subagent-statusline",
+    ".opencode/plugins/graphify.js"
+  ],
   "mcp": {
     "context7": {
       "type": "local",
-      "command": ["bunx", "-y", "@upstash/context7-mcp@4.0.3"],
-      "enabled": true
+      "command": [
+        "bunx",
+        "-y",
+        "@upstash/context7-mcp@4.0.3"
+      ],
+      "enabled": false
     },
     "tavily": {
       "type": "remote",
       "url": "https://mcp.tavily.com/mcp/",
-      "enabled": true,
+      "enabled": false,
       "headers": {
         "Authorization": "Bearer {env:TAVILY_API_KEY}"
       }
@@ -53,7 +60,7 @@
         "--viewport-size",
         "1920x1080"
       ],
-      "enabled": true
+      "enabled": false
     },
     // dbhub.toml reads these six through ${VAR} interpolation, but only from the
     // environment the server is LAUNCHED with. Declaring them here is what puts
@@ -62,8 +69,14 @@
     // on connect rather than at startup: see docs/mcp/.
     "dbhub": {
       "type": "local",
-      "command": ["bunx", "-y", "@bytebase/dbhub@1.2.1", "--config", "dbhub.toml"],
-      "enabled": true,
+      "command": [
+        "bunx",
+        "-y",
+        "@bytebase/dbhub@1.2.1",
+        "--config",
+        "dbhub.toml"
+      ],
+      "enabled": false,
       "environment": {
         "DBHUB_DATABASE": "{env:DBHUB_DATABASE}",
         "DBHUB_HOST": "{env:DBHUB_HOST}",
@@ -81,8 +94,14 @@
     // requirement for API auth. OPENAPI_SPEC_PATH may be a local file OR a URL.
     "openapi": {
       "type": "local",
-      "command": ["bunx", "-y", "@ivotoby/openapi-mcp-server@1.16.1", "--tools", "dynamic"],
-      "enabled": true,
+      "command": [
+        "bunx",
+        "-y",
+        "@ivotoby/openapi-mcp-server@1.16.1",
+        "--tools",
+        "dynamic"
+      ],
+      "enabled": false,
       "environment": {
         "API_BASE_URL": "{env:API_BASE_URL}",
         "OPENAPI_SPEC_PATH": "{env:OPENAPI_SPEC_PATH}"
@@ -91,13 +110,25 @@
     "postman": {
       "type": "remote",
       "url": "https://mcp.postman.com/mcp",
-      "enabled": true,
+      "enabled": false,
       "headers": {
         "Authorization": "Bearer {env:POSTMAN_API_KEY}"
       }
+    },
+    "mongodb": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "mongodb-mcp-server@latest",
+        "--readOnly"
+      ],
+      "enabled": false,
+      "environment": {
+        "MDB_MCP_CONNECTION_STRING": "{env:MDB_MCP_CONNECTION_STRING}"
+      }
     }
   },
-
   // Permissions — mirrors .claude/settings.json 1:1.
   // Rule precedence: last matching pattern wins, so deny entries are placed
   // AFTER the broad allows they override (e.g. `git *` allow, then
@@ -108,7 +139,6 @@
     "websearch": "allow",
     "bash": {
       "*": "ask",
-
       "bun *": "allow",
       "bunx *": "allow",
       "npm *": "allow",
@@ -116,10 +146,8 @@
       "pnpm *": "allow",
       "yarn *": "allow",
       "node *": "allow",
-
       "git *": "allow",
       "gh *": "allow",
-
       "ls *": "allow",
       "cat *": "allow",
       "echo *": "allow",
@@ -140,11 +168,9 @@
       "diff *": "allow",
       "jq *": "allow",
       "curl *": "allow",
-
       "playwright *": "allow",
       "allure *": "allow",
       "acli *": "allow",
-
       "rm -rf *": "deny",
       "wget *": "deny",
       "sudo rm *": "deny",
