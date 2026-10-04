@@ -77,3 +77,13 @@ args = [
 url = "https://mcp.postman.com/mcp"
 bearer_token_env_var = "POSTMAN_API_KEY"
 enabled = true
+
+[mcp_servers.mongodb]
+command = "npx"
+enabled = true
+args = [
+  "-y",
+  "mongodb-mcp-server@latest",
+  "--readOnly",
+]
+env_vars = [ "MDB_MCP_CONNECTION_STRING" ]
