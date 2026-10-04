@@ -115,7 +115,7 @@ Gating PRs and branches comes from two minutes. Decided vs proposed vs still ope
 | Git hooks (Husky) pre-commit/pre-push                                                                  | kickoff §3 (Nahuel)     | ✅ landed (PR #2)                                                            |
 | **Pruebas de sanidad (sanity)** — basic tests on the critical flows, run automatically in the pipeline | kickoff §3 (Nahuel, QA) | **proposed, scope pending** ("confirmar alcance según disponibilidad de QA") |
 | Reduced E2E set on `main` (manual data)                                                                | S2 §2.1                 | decided                                                                      |
-| Deploy (Railway + Docker + PostgreSQL)                                                                 | kickoff §2              | platform decided; no deploy workflow file yet                                |
+| Deploy (Railway + Docker + MongoDB)                                                                    | kickoff §2 · S2 §4.1    | platform decided; no deploy workflow file yet; MongoDB ratified S2 §4.1      |
 
 **Not in the minutes** (do not treat as decided): a standalone `build.yml` (build is folded into `ci.yml` today), a named `smoke.yml`, and unit tests (no `test` script or framework in `frontend/` yet). These are gaps to raise with the team, not settled agreements.
 

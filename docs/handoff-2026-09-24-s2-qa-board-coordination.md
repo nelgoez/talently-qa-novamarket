@@ -78,8 +78,8 @@ Próxima semana (Sprint 3 — catálogo y detalle):
 ## Open items
 
 1. **50+ reconciliation decision (Pame)** — draft Productos/Carrito/Checkout cases now (marked "pendiente wireframe/impl") vs grow cumulative by sprint.
-2. **AC-AUTH-1** — auto-login vs redirect (Backend/PO decision).
-3. **AC-AUTH-6** — confirm `GET /api/auth/me` for session restore.
+2. **AC-AUTH-1** — auto-login vs redirect: Front confirms redirect to `/login` (contract v0.2, no token); **pending Back/PO ratification**.
+3. **AC-AUTH-6** — `GET /api/auth/me` confirmed by Front for session restore.
 4. **Card creation is PO-owned** — no QA cards were created this session; the Productos QA card is Pame's call.
 5. **Notion** — evaluated and skipped; the traceability spine stays in Google Drive (Sheet matrix + Doc proposal).
 
