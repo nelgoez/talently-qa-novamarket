@@ -77,4 +77,4 @@ The following detail is deferred to the Back End and Front End teams and is not 
 - Error response format
 - Authentication mechanism details
 
-The base assumption is PostgreSQL as the data engine, pending Backend ratification.
+The base assumption is MongoDB as the data engine, ratified 2026-09-24 (minuta S2 §4.1 + contrato v0.3 §2).

@@ -105,9 +105,9 @@ Marked as pending dev deliverables. Do not invent entities, endpoints, schemas, 
 
 | Item | Status |
 |------|--------|
-| Database schema | PostgreSQL assumed as the data engine, **pending ratification by Backend** |
+| Database schema | MongoDB ratified (minuta 24/09 §4.1 + contrato v0.3 §2): collections `users`, `categories`, `products`, `orders` |
 | API contracts | Endpoints (`POST /api/orders`, protected routes), error format, and JWT behavior pending Backend closure (BCK-001..010) |
 | Environments | Test data and targets referenced as `dev` in the matrix; the environment map is not yet defined |
-| Business decisions | Register → auto-login vs redirect to login (AC-AUTH-1); out-of-stock product shown as "sin stock" vs omitted (AC-CAT-6) — both await a business/PO decision |
+| Business decisions | Register → auto-login vs redirect (AC-AUTH-1): Front confirms redirect to `/login` (contract v0.2, no token), pending Back/PO ratification; out-of-stock product "sin stock" vs omitted (AC-CAT-6) — still awaits business/PO |
 
 These gaps are raised now (Tip Pro: question the brief early) and become unblockers for Week 1, so no one starts Week 2 blocked.
